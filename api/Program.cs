@@ -13,29 +13,67 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+const string UploadDirectoryName = "Uploads";
+Directory.CreateDirectory(UploadDirectoryName);
 
-var summaries = new[]
+const string recordingsApiSegment = "/recordings";
+
+app.MapPost(recordingsApiSegment, async (HttpRequest request, CancellationToken cancellationToken) =>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    if (!request.HasFormContentType)
+    {
+        return Results.BadRequest("The request doesn't contain a form.");
+    }
 
-app.MapGet("/weatherforecast", () =>
+    var form = request.Form;
+
+    if (form.Files.Count == 0)
+    {
+        return Results.BadRequest("No files were uploaded.");
+    }
+
+    foreach (var file in form.Files)
+    {
+        // Process each uploaded file here
+        // For example, you can save the file to a specific location
+        var filePath = Path.Combine(UploadDirectoryName, file.FileName);
+
+        using var stream = File.Create(filePath);
+        await file.CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
+    }
+
+    return Results.Ok("Files uploaded successfully.");
+}).WithName("UploadRecording").WithOpenApi();
+
+app.MapGet(recordingsApiSegment, () =>
 {
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+    var files = Directory.GetFiles(UploadDirectoryName)
+        .Select(filePath => new
+        {
+            FileName = Path.GetFileName(filePath),
+            Url = $"/{UploadDirectoryName}/{Path.GetFileName(filePath)}"
+        })
+        .ToList();
 
-app.Run();
+    return Results.Ok(files);
+}).WithName("ListRecordings").WithOpenApi();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
+app.MapDelete($"{recordingsApiSegment}/{{fileName}}", (string fileName) =>
 {
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+    if (Path.IsPathRooted(fileName) || fileName.Contains(".."))
+    {
+        return Results.BadRequest("Invalid file name.");
+    }
+    var filePath = Path.Combine(UploadDirectoryName, fileName);
+
+    if (!File.Exists(filePath))
+    {
+        return Results.NotFound("File not found.");
+    }
+
+    File.Delete(filePath);
+    return Results.Ok("File deleted successfully.");
+}).WithName("DeleteRecording").WithOpenApi();
+
+await app.RunAsync();
+
