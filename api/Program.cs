@@ -1,7 +1,6 @@
 using Swashbuckle.AspNetCore.SwaggerUI;
 using OpenAI.Audio;
 using OpenAI;
-using System.ClientModel;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 
@@ -43,11 +42,13 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 const string UploadDirectoryName = "Uploads";
+const string transcriptionDirectoryName = "Transcriptions";
 Directory.CreateDirectory(UploadDirectoryName);
+Directory.CreateDirectory(transcriptionDirectoryName);
 
 const string recordingsApiSegment = "/recordings";
 
-app.MapPost(recordingsApiSegment, async (HttpRequest request, CancellationToken cancellationToken) =>
+app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client, CancellationToken cancellationToken) =>
 {
     if (!request.HasFormContentType)
     {
@@ -60,19 +61,34 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, CancellationToken 
     {
         return Results.BadRequest("No files were uploaded.");
     }
+    var options = new AudioTranscriptionOptions
+    {
+        ResponseFormat = AudioTranscriptionFormat.Text,
+        TimestampGranularities = AudioTimestampGranularities.Word | AudioTimestampGranularities.Segment,
+    };
 
+    var results = new List<object>();
     foreach (var file in form.Files)
     {
         // Process each uploaded file here
         // For example, you can save the file to a specific location
         var filePath = Path.Combine(UploadDirectoryName, file.FileName);
 
-        using var stream = File.Create(filePath);
-        await file.CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
+        using var fileStream = File.Create(filePath);
+        using var ms = new MemoryStream();
+        await file.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+        ms.Position = 0;
+        await ms.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
+        ms.Position = 0;
 
+        var fileName = Path.GetFileName(filePath);
+        var transcription = await client.TranscribeAudioAsync(ms, fileName, options, cancellationToken).ConfigureAwait(false);
+        var transcriptionPath = Path.Combine(transcriptionDirectoryName, Path.ChangeExtension(fileName, ".txt"));
+        await File.WriteAllTextAsync(transcriptionPath, transcription.Value.Text, cancellationToken).ConfigureAwait(false);
+        results.Add(new { file = filePath, transcriptionFile = transcriptionPath });
     }
 
-    return Results.Ok("Files uploaded successfully.");
+    return Results.Ok(results);
 }).WithName("UploadRecording").WithOpenApi();
 
 app.MapGet(recordingsApiSegment, () =>
@@ -114,34 +130,5 @@ app.MapDelete("/clean-app", () =>
     }
     return Results.Accepted();
 }).WithName("CleanApp").WithOpenApi();
-
-const string transcriptionDirectoryName = "Transcriptions";
-// Transcribe endpoint
-app.MapPost("/transcribe", async (AudioClient client, CancellationToken cancellationToken) =>
-{
-    Directory.CreateDirectory(transcriptionDirectoryName);
-
-    var mp3Files = Directory.GetFiles(UploadDirectoryName, "*.mp3");
-    if (mp3Files.Length == 0)
-    {
-        return Results.BadRequest("No mp3 files found in Uploads.");
-    }
-
-    var options = new AudioTranscriptionOptions
-    {
-        ResponseFormat = AudioTranscriptionFormat.Text,
-        TimestampGranularities = AudioTimestampGranularities.Word | AudioTimestampGranularities.Segment,
-    };
-
-    var results = new List<object>();
-    foreach (var filePath in mp3Files)
-    {
-        var transcription = await client.TranscribeAudioAsync(filePath, options);
-        var transcriptionPath = Path.Combine(transcriptionDirectoryName, Path.ChangeExtension(Path.GetFileName(filePath), ".txt"));
-        await File.WriteAllTextAsync(transcriptionPath, transcription.Value.Text, cancellationToken);
-        results.Add(new { file = filePath, transcriptionFile = transcriptionPath });
-    }
-    return Results.Ok(results);
-}).WithName("TranscribeRecordings").WithOpenApi();
 
 await app.RunAsync();
