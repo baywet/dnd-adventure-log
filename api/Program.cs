@@ -15,11 +15,11 @@ const string eastUS2Region = "EastUS2";
 const string eastUSRegion = "EastUS";
 builder.Services.AddSingleton<AzureNamedServicesHolder>(_ =>
 {
-	AzureOpenAIClient createClient(string region) => new(
+    AzureOpenAIClient createClient(string region) => new(
         new Uri(builder.Configuration[$"AzureOpenAI:{region}"] ??
                 throw new InvalidOperationException($"Please set the AzureOpenAI:{region} configuration value.")),
         new DefaultAzureCredential());
-    return new (new (StringComparer.OrdinalIgnoreCase)
+    return new(new(StringComparer.OrdinalIgnoreCase)
     {
         { eastUS2Region, createClient(eastUS2Region) },
         { eastUSRegion, createClient(eastUSRegion) },
