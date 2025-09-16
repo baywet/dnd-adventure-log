@@ -75,5 +75,15 @@ app.MapDelete($"{recordingsApiSegment}/{{fileName}}", (string fileName) =>
     return Results.Ok("File deleted successfully.");
 }).WithName("DeleteRecording").WithOpenApi();
 
+app.MapDelete("/clean-app", () =>
+{
+    var directoryInfo = new DirectoryInfo(UploadDirectoryName);
+    foreach (var file in directoryInfo.GetFiles())
+    {
+        file.Delete();
+    }
+    return Results.Accepted();
+});
+
 await app.RunAsync();
 
