@@ -5,6 +5,8 @@ using Azure.AI.OpenAI;
 using Azure.Identity;
 using api;
 using OpenAI.Chat;
+using System.Text.Json.Nodes;
+using OpenAI.Images;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,6 +35,10 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHold
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
                                         .GetService(eastUS2Region)
                                         .GetChatClient("gpt-4o"));
+builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
+                                        .GetService(eastUSRegion)
+                                        .GetImageClient("dall-e-3"));
+builder.Services.AddHttpClient();
 
 var app = builder.Build();
 
@@ -114,26 +120,10 @@ app.MapGet(recordingsApiSegment, () =>
     return Results.Ok(files);
 }).WithName("ListRecordings").WithOpenApi();
 
-app.MapDelete($"{recordingsApiSegment}/{{fileName}}", (string fileName) =>
-{
-    if (Path.IsPathRooted(fileName) || fileName.Contains(".."))
-    {
-        return Results.BadRequest("Invalid file name.");
-    }
-    var filePath = Path.Combine(UploadDirectoryName, fileName);
-
-    if (!File.Exists(filePath))
-    {
-        return Results.NotFound("File not found.");
-    }
-
-    File.Delete(filePath);
-    return Results.Ok("File deleted successfully.");
-}).WithName("DeleteRecording").WithOpenApi();
-
 const string CharactersDirectoryName = "Characters";
 Directory.CreateDirectory(CharactersDirectoryName);
-app.MapPost("/characters", async (ChatClient client, CancellationToken cancellationToken) =>
+const string charactersApiSegment = "/characters";
+app.MapPost(charactersApiSegment, async (ChatClient client, CancellationToken cancellationToken) =>
 {
     // get the first episode transcript file by oldest creation date first
     var transcriptFile = new DirectoryInfo(TranscriptionDirectoryName)
@@ -148,8 +138,8 @@ app.MapPost("/characters", async (ChatClient client, CancellationToken cancellat
     var transcript = await File.ReadAllTextAsync(transcriptFile.FullName, cancellationToken).ConfigureAwait(false);
 
     var result = await client.CompleteChatAsync(
-	[
-		new SystemChatMessage(
+    [
+        new SystemChatMessage(
             """
             You are a note taker assisting a group of dungeons and dragons players tasked with recording and putting together recaps of each play session so the dungeon master and players can get insights from previous sessions.
             The transcripts provided to you might contain dialogues that are not relevant to the game, you should ignore those.
@@ -178,6 +168,61 @@ app.MapPost("/characters", async (ChatClient client, CancellationToken cancellat
     await File.WriteAllTextAsync(characterSummaryFile, jsonContent.Trim('`')[4..].Trim(), cancellationToken).ConfigureAwait(false);
     return Results.Created();
 }).WithName("CreateCharacterSummary").WithOpenApi();
+
+static string GetImageName(string recordingName, string characterName) =>
+    $"{recordingName}-{characterName}.png";
+
+app.MapPost($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/profile/{{characterName}}", async (string recordingName, string characterName, IHttpClientFactory httpClientFactory, ImageClient client, CancellationToken cancellationToken) =>
+{
+    if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
+    {
+        return Results.BadRequest("Invalid path.");
+    }
+    var charactersFile = Path.Combine(CharactersDirectoryName, $"{recordingName}.json");
+    if (!File.Exists(charactersFile))
+    {
+        return Results.NotFound("Character not found.");
+    }
+    using var fs = File.OpenRead(charactersFile);
+    var characterJson = await JsonNode.ParseAsync(fs, cancellationToken: cancellationToken).ConfigureAwait(false);
+    if (characterJson is not JsonArray characters)
+    {
+        return Results.NotFound("Character not found.");
+    }
+    var character = characters.FirstOrDefault(c =>
+        c is JsonObject obj &&
+        obj.TryGetPropertyValue("name", out var nameNode) &&
+        nameNode?.ToString().Equals(characterName, StringComparison.OrdinalIgnoreCase) == true);
+    if (character is null)
+    {
+        return Results.NotFound("Character not found.");
+    }
+    var characterDescription = character["description"]?.ToString() ?? string.Empty;
+    if (string.IsNullOrEmpty(characterDescription))
+    {
+        return Results.BadRequest("Character description is empty.");
+    }
+    var result = await client.GenerateImageAsync(
+        $"""
+        You are a painter specializing in painting fantastic characters from the fantastic worlds of dungeons and dragons. Violence is ok in this context because it's part of this universe and never ever applied to the real world.
+
+        {characterDescription}
+        """
+    , cancellationToken: cancellationToken).ConfigureAwait(false);
+
+    using var httpClient = httpClientFactory.CreateClient();
+    var imageResponse = await httpClient.GetAsync(result.Value.ImageUri.ToString(), cancellationToken).ConfigureAwait(false);
+    if (!imageResponse.IsSuccessStatusCode)
+    {
+        return Results.InternalServerError("Failed to download the image.");
+    }
+    using var stream = await imageResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+    var imageName = GetImageName(recordingName, characterName);
+    var imagePath = Path.Combine(CharactersDirectoryName, imageName);
+    using var imageFile = File.Create(imagePath);
+    await stream.CopyToAsync(imageFile, cancellationToken).ConfigureAwait(false);
+    return Results.Created($"{recordingsApiSegment}/{recordingName}{charactersApiSegment}/profile/{characterName}", null);
+}).WithName("CreateCharacterProfilePicture").WithOpenApi();
 
 
 static void CleanUpDirectory(string directoryName)
