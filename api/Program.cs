@@ -4,6 +4,7 @@ using OpenAI;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using api;
+using OpenAI.Chat;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,6 +30,10 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHold
                                         .GetService(eastUS2Region)
                                         .GetAudioClient("gpt-4o-transcribe"));
 
+builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
+                                        .GetService(eastUS2Region)
+                                        .GetChatClient("gpt-4o"));
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -47,9 +52,9 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 const string UploadDirectoryName = "Uploads";
-const string transcriptionDirectoryName = "Transcriptions";
+const string TranscriptionDirectoryName = "Transcriptions";
 Directory.CreateDirectory(UploadDirectoryName);
-Directory.CreateDirectory(transcriptionDirectoryName);
+Directory.CreateDirectory(TranscriptionDirectoryName);
 
 const string recordingsApiSegment = "/recordings";
 
@@ -88,7 +93,7 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client
 
         var fileName = Path.GetFileName(filePath);
         var transcription = await client.TranscribeAudioAsync(ms, fileName, options, cancellationToken).ConfigureAwait(false);
-        var transcriptionPath = Path.Combine(transcriptionDirectoryName, Path.ChangeExtension(fileName, ".txt"));
+        var transcriptionPath = Path.Combine(TranscriptionDirectoryName, Path.ChangeExtension(fileName, ".txt"));
         await File.WriteAllTextAsync(transcriptionPath, transcription.Value.Text, cancellationToken).ConfigureAwait(false);
         results.Add(new { file = filePath, transcriptionFile = transcriptionPath });
     }
@@ -126,19 +131,75 @@ app.MapDelete($"{recordingsApiSegment}/{{fileName}}", (string fileName) =>
     return Results.Ok("File deleted successfully.");
 }).WithName("DeleteRecording").WithOpenApi();
 
+const string CharactersDirectoryName = "Characters";
+Directory.CreateDirectory(CharactersDirectoryName);
+app.MapPost("/characters", async (ChatClient client, CancellationToken cancellationToken) =>
+{
+    // get the first episode transcript file by oldest creation date first
+    var transcriptFile = new DirectoryInfo(TranscriptionDirectoryName)
+        .GetFiles("*.txt")
+        .OrderBy(static f => f.CreationTime)
+        .FirstOrDefault();
+
+    if (string.IsNullOrEmpty(transcriptFile?.FullName) || !File.Exists(transcriptFile.FullName))
+    {
+        return Results.NotFound("No transcription files found.");
+    }
+    var transcript = await File.ReadAllTextAsync(transcriptFile.FullName, cancellationToken).ConfigureAwait(false);
+
+    var result = await client.CompleteChatAsync(
+	[
+		new SystemChatMessage(
+            """
+            You are a note taker assisting a group of dungeons and dragons players tasked with recording and putting together recaps of each play session so the dungeon master and players can get insights from previous sessions.
+            The transcripts provided to you might contain dialogues that are not relevant to the game, you should ignore those.
+            Format the response as JSON using the following JSON schema:
+            {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": { "type": "string" },
+                        "description": { "type": "string" },
+                        "level": { "type": "integer", "nullable": true },
+                        "race": { "type": "string", "nullable": true }
+                    }
+                }
+            }
+            """),
+        new UserChatMessage(
+            """
+            Based on the following transcript, give me a summary of the characters in this adventure in a form of 3 sentences per character. I'm interested in their cast, race, level, physical appearance and background.
+            """),
+        new UserChatMessage(transcript)
+    ], cancellationToken: cancellationToken).ConfigureAwait(false);
+    var jsonContent = result.Value.Content[0].Text;
+    var characterSummaryFile = Path.Combine(CharactersDirectoryName, Path.ChangeExtension(transcriptFile.Name, ".json"));
+    await File.WriteAllTextAsync(characterSummaryFile, jsonContent.Trim('`')[4..].Trim(), cancellationToken).ConfigureAwait(false);
+    return Results.Created();
+}).WithName("CreateCharacterSummary").WithOpenApi();
+
+
+static void CleanUpDirectory(string directoryName)
+{
+    if (!Directory.Exists(directoryName))
+    {
+        return;
+    }
+    var directoryInfo = new DirectoryInfo(directoryName);
+    foreach (var file in directoryInfo.GetFiles())
+    {
+        file.Delete();
+    }
+}
+
 app.MapDelete("/clean-app", () =>
 {
-    var uploadDirectoryInfo = new DirectoryInfo(UploadDirectoryName);
-    foreach (var file in uploadDirectoryInfo.GetFiles())
-    {
-        file.Delete();
-    }
-    var transcriptionDirectoryInfo = new DirectoryInfo(transcriptionDirectoryName);
-    foreach (var file in transcriptionDirectoryInfo.GetFiles())
-    {
-        file.Delete();
-    }
+    CleanUpDirectory(UploadDirectoryName);
+    CleanUpDirectory(TranscriptionDirectoryName);
+    CleanUpDirectory(CharactersDirectoryName);
     return Results.Accepted();
 }).WithName("CleanApp").WithOpenApi();
+
 
 await app.RunAsync();
