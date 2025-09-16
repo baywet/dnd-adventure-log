@@ -3,6 +3,7 @@ using OpenAI.Audio;
 using OpenAI;
 using Azure.AI.OpenAI;
 using Azure.Identity;
+using api;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,19 +11,23 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSingleton(sp =>
+const string eastUS2Region = "EastUS2";
+const string eastUSRegion = "EastUS";
+builder.Services.AddSingleton<AzureNamedServicesHolder>(_ =>
 {
-    var azureClient = new AzureOpenAIClient(
-        new Uri("https://vince-mflc0t6x-eastus2.cognitiveservices.azure.com"),
+	AzureOpenAIClient createClient(string region) => new(
+        new Uri(builder.Configuration[$"AzureOpenAI:{region}"] ??
+                throw new InvalidOperationException($"Please set the AzureOpenAI:{region} configuration value.")),
         new DefaultAzureCredential());
-    return azureClient;
+    return new (new (StringComparer.OrdinalIgnoreCase)
+    {
+        { eastUS2Region, createClient(eastUS2Region) },
+        { eastUSRegion, createClient(eastUSRegion) },
+    });
 });
-builder.Services.AddSingleton(sp =>
-{
-    var azureClient = sp.GetRequiredService<AzureOpenAIClient>();
-    var client = azureClient.GetAudioClient("gpt-4o-transcribe");
-    return client;
-});
+builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
+                                        .GetService(eastUS2Region)
+                                        .GetAudioClient("gpt-4o-transcribe"));
 
 var app = builder.Build();
 
