@@ -2,6 +2,11 @@
 
 ## Pre-reqs
 
+1. Dotnet SDK 9 `sudo winget install Microsoft.Dotnet.SDK.9`.
+1. Azure CLI `sudo winget install Microsoft.AzureCLI`.
+1. A valid azure subscription.
+1. Visual Studio code `sudo winget install Microsoft.VisualStudioCode`.
+
 ## Getting ready
 
 1. Browser open to [ai.azure.com](https://ai.azure.com)
