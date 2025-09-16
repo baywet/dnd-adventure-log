@@ -11,6 +11,8 @@
 
 1. Browser open to [ai.azure.com](https://ai.azure.com)
 1. VSCode open to this repository, with the model-instructions open.
+1. Terminal open, and signed in to azure `az login --tenant "vincentbirethotmail.onmicrosoft.com"`.
+1. API running `dotnet watch run --project .\api\api.csproj`.
 
 ## Deploying and testing the models
 
