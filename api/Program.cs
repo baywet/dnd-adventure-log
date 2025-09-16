@@ -1,8 +1,11 @@
+using Swashbuckle.AspNetCore.SwaggerUI;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
 
@@ -10,9 +13,17 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    const string apiDocsPath = "api-docs";
+    app.UseSwaggerUI((options) =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "v1");
+        options.RoutePrefix = apiDocsPath;
+    });
+    app.MapGet("/", () => Results.LocalRedirect($"/{apiDocsPath}"));
 }
 
 app.UseHttpsRedirection();
+
 const string UploadDirectoryName = "Uploads";
 Directory.CreateDirectory(UploadDirectoryName);
 
