@@ -19,7 +19,7 @@ if (app.Environment.IsDevelopment())
         options.SwaggerEndpoint("/openapi/v1.json", "v1");
         options.RoutePrefix = apiDocsPath;
     });
-    app.MapGet("/", () => Results.LocalRedirect($"/{apiDocsPath}"));
+    app.MapGet("/", () => Results.LocalRedirect($"/{apiDocsPath}")).ExcludeFromDescription();
 }
 
 app.UseHttpsRedirection();
