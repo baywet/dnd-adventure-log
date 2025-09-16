@@ -1,3 +1,5 @@
+using NAudio.Wave;
+using NAudio.Lame;
 using Swashbuckle.AspNetCore.SwaggerUI;
 using OpenAI.Audio;
 using OpenAI;
@@ -64,10 +66,49 @@ Directory.CreateDirectory(TranscriptionDirectoryName);
 
 const string recordingsApiSegment = "/recordings";
 
+/// <summary>
+/// Converts an MP3 MemoryStream to a lower bitrate MP3 MemoryStream.
+/// </summary>
+/// <param name="inputMp3Stream">Input MP3 stream</param>
+/// <param name="targetBitrateKbps">Target bitrate in kbps (e.g., 64)</param>
+/// <returns>MemoryStream containing lower bitrate MP3</returns>
+static async Task<MemoryStream> ConvertMp3ToLowerBitrate(MemoryStream inputMp3Stream, int targetBitrateKbps, CancellationToken cancellationToken)
+{
+    inputMp3Stream.Position = 0;
+    using var mp3Reader = new Mp3FileReader(inputMp3Stream);
+    using var pcmStream = WaveFormatConversionStream.CreatePcmStream(mp3Reader);
+    var outStream = new MemoryStream();
+    using var lame = new LameMP3FileWriter(outStream, pcmStream.WaveFormat, targetBitrateKbps);
+    await pcmStream.CopyToAsync(lame, cancellationToken).ConfigureAwait(false);
+    await lame.FlushAsync(cancellationToken).ConfigureAwait(false);
+    outStream.Position = 0;
+    return outStream;
+}
+
+const int maxChunkSize = 25_000_000; // 25 MB
 static async Task<string> ChunkAndMergeTranscriptsIfRequired(MemoryStream originalStream, string fileName, AudioTranscriptionOptions options, AudioClient client, CancellationToken cancellationToken)
 {
-    var transcription = await client.TranscribeAudioAsync(originalStream, fileName, options, cancellationToken).ConfigureAwait(false);
-    return transcription.Value.Text;
+    if (originalStream.Length < maxChunkSize)
+    {
+        var transcription = await client.TranscribeAudioAsync(originalStream, fileName, options, cancellationToken).ConfigureAwait(false);
+        return transcription.Value.Text;
+    }
+
+    using var reducedBitrateStream = await ConvertMp3ToLowerBitrate(originalStream, 64, cancellationToken).ConfigureAwait(false);
+    // copy the result to a temp file for diagnostics if needed
+    var tempFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mp3");
+    await using (var tempFileStream = File.Create(tempFilePath))
+    {
+        await reducedBitrateStream.CopyToAsync(tempFileStream, cancellationToken).ConfigureAwait(false);
+        reducedBitrateStream.Position = 0;
+    }
+    if (reducedBitrateStream.Length < maxChunkSize)
+    {
+        var transcription = await client.TranscribeAudioAsync(reducedBitrateStream, fileName, options, cancellationToken).ConfigureAwait(false);
+        return transcription.Value.Text;
+    }
+
+    throw new InvalidOperationException("The audio file is too large to process even after reducing the bitrate.");
 }
 
 app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client, CancellationToken cancellationToken) =>
@@ -117,7 +158,7 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client
     }
 
     return Results.Ok(results);
-}).WithName("UploadRecording").WithOpenApi();
+}).WithName("UploadRecording").WithOpenApi().DisableRequestTimeout();
 
 app.MapGet(recordingsApiSegment, () =>
 {
