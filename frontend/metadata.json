@@ -1,0 +1,5 @@
+{
+  "name": "D&D Quest Visualizer",
+  "description": "Upload an audio recording of your Dungeons & Dragons session. This app will transcribe the session, generate character portraits for your players, and create a short, epic video of the quest's most climatic moment.",
+  "requestFramePermissions": []
+}
