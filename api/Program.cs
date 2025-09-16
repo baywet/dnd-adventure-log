@@ -123,8 +123,13 @@ app.MapDelete($"{recordingsApiSegment}/{{fileName}}", (string fileName) =>
 
 app.MapDelete("/clean-app", () =>
 {
-    var directoryInfo = new DirectoryInfo(UploadDirectoryName);
-    foreach (var file in directoryInfo.GetFiles())
+    var uploadDirectoryInfo = new DirectoryInfo(UploadDirectoryName);
+    foreach (var file in uploadDirectoryInfo.GetFiles())
+    {
+        file.Delete();
+    }
+    var transcriptionDirectoryInfo = new DirectoryInfo(transcriptionDirectoryName);
+    foreach (var file in transcriptionDirectoryInfo.GetFiles())
     {
         file.Delete();
     }
