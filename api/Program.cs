@@ -64,8 +64,20 @@ Directory.CreateDirectory(TranscriptionDirectoryName);
 
 const string recordingsApiSegment = "/recordings";
 
+static async Task<string> ChunkAndMergeTranscriptsIfRequired(MemoryStream originalStream, string fileName, AudioTranscriptionOptions options, AudioClient client, CancellationToken cancellationToken)
+{
+    var transcription = await client.TranscribeAudioAsync(originalStream, fileName, options, cancellationToken).ConfigureAwait(false);
+    return transcription.Value.Text;
+}
+
 app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client, CancellationToken cancellationToken) =>
 {
+    // Set max request body size to 100 MB for this endpoint
+    var maxRequestBodySizeFeature = request.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+    if (maxRequestBodySizeFeature != null && !maxRequestBodySizeFeature.IsReadOnly)
+    {
+        maxRequestBodySizeFeature.MaxRequestBodySize = 100_000_000; // 100 MB
+    }
     if (!request.HasFormContentType)
     {
         return Results.BadRequest("The request doesn't contain a form.");
@@ -98,9 +110,9 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client
         ms.Position = 0;
 
         var fileName = Path.GetFileName(filePath);
-        var transcription = await client.TranscribeAudioAsync(ms, fileName, options, cancellationToken).ConfigureAwait(false);
+        var transcription = await ChunkAndMergeTranscriptsIfRequired(ms, fileName, options, client, cancellationToken).ConfigureAwait(false);
         var transcriptionPath = Path.Combine(TranscriptionDirectoryName, Path.ChangeExtension(fileName, ".txt"));
-        await File.WriteAllTextAsync(transcriptionPath, transcription.Value.Text, cancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(transcriptionPath, transcription, cancellationToken).ConfigureAwait(false);
         results.Add(new { file = filePath, transcriptionFile = transcriptionPath });
     }
 
@@ -224,7 +236,7 @@ app.MapPost($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/pro
     return Results.Created($"{recordingsApiSegment}/{recordingName}{charactersApiSegment}/profile/{characterName}", null);
 }).WithName("CreateCharacterProfilePicture").WithOpenApi();
 
-app.MapGet($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/profile/{{characterName}}", (string recordingName, string characterName, CancellationToken cancellationToken) =>
+app.MapGet($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/profile/{{characterName}}", (string recordingName, string characterName) =>
 {
     if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
     {
@@ -244,6 +256,35 @@ app.MapGet($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/prof
     var imageStream = File.OpenRead(imagePath);
     return Results.File(imageStream, "image/png");
 }).WithName("GetCharacterProfilePicture").WithOpenApi();
+
+const string epicMomentsApiSegment = "/epic-moment";
+app.MapPost($"{recordingsApiSegment}/{{recordingName}}{epicMomentsApiSegment}", async (string recordingName, ChatClient client, CancellationToken cancellationToken) =>
+{
+    if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
+    {
+        return Results.BadRequest("Invalid path.");
+    }
+    var transcriptFile = Path.Combine(TranscriptionDirectoryName, $"{recordingName}.txt");
+    if (!File.Exists(transcriptFile))
+    {
+        return Results.NotFound("Transcription not found.");
+    }
+    var transcript = await File.ReadAllTextAsync(transcriptFile, cancellationToken).ConfigureAwait(false);
+    var result = await client.CompleteChatAsync(
+    [
+        new SystemChatMessage(
+            """
+            You are a bard following a group of dungeons and dragons heros and tasked with collecting tales of their most epic moments during their adventures.
+            Analyze the transcript of this play session and extract a tale of an epic encounter. You might recount it as a 10 sentences story or ballad.
+            Exaggerate the details and the facts to make it more interesting and entertaining.
+            """),
+        new UserChatMessage(transcript)
+    ], cancellationToken: cancellationToken).ConfigureAwait(false);
+    var taleContent = result.Value.Content[0].Text;
+    var taleFile = Path.Combine(TranscriptionDirectoryName, $"{recordingName}-epic-moment.txt");
+    await File.WriteAllTextAsync(taleFile, taleContent, cancellationToken).ConfigureAwait(false);
+    return Results.Created();
+}).WithName("CreateEpicMoment").WithOpenApi();
 
 
 
