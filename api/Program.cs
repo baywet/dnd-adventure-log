@@ -224,6 +224,28 @@ app.MapPost($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/pro
     return Results.Created($"{recordingsApiSegment}/{recordingName}{charactersApiSegment}/profile/{characterName}", null);
 }).WithName("CreateCharacterProfilePicture").WithOpenApi();
 
+app.MapGet($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/profile/{{characterName}}", (string recordingName, string characterName, CancellationToken cancellationToken) =>
+{
+    if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
+    {
+        return Results.BadRequest("Invalid path.");
+    }
+    var charactersFile = Path.Combine(CharactersDirectoryName, $"{recordingName}.json");
+    if (!File.Exists(charactersFile))
+    {
+        return Results.NotFound("Character not found.");
+    }
+    var imageName = GetImageName(recordingName, characterName);
+    var imagePath = Path.Combine(CharactersDirectoryName, imageName);
+    if (!File.Exists(imagePath))
+    {
+        return Results.NotFound("Character image not found.");
+    }
+    var imageStream = File.OpenRead(imagePath);
+    return Results.File(imageStream, "image/png");
+}).WithName("GetCharacterProfilePicture").WithOpenApi();
+
+
 
 static void CleanUpDirectory(string directoryName)
 {
