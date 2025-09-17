@@ -1,6 +1,6 @@
 import React from 'react';
 import { TrashIcon } from './icons/TrashIcon';
-import { ApiService } from '@/services/api.service';
+import { ApiService } from '../services/api.service';
 
 interface UploadedFilesProps {
   files: File[];

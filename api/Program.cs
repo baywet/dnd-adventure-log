@@ -1,3 +1,5 @@
+using NAudio.Wave;
+using NAudio.Lame;
 using Swashbuckle.AspNetCore.SwaggerUI;
 using OpenAI.Audio;
 using OpenAI;
@@ -6,6 +8,8 @@ using Azure.Identity;
 using api;
 using OpenAI.Chat;
 using Microsoft.AspNetCore.Http.Features;
+using System.Text.Json.Nodes;
+using OpenAI.Images;
 
 const int MaxChunkSize = 20 * 1024 * 1024; // 20MB
 
@@ -50,12 +54,16 @@ builder.Services.AddSingleton<AzureNamedServicesHolder>(_ =>
     });
 });
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(eastUSRegion)
+                                        .GetService(eastUS2Region)
                                         .GetAudioClient("gpt-4o-transcribe"));
 
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(eastUSRegion)
+                                        .GetService(eastUS2Region)
                                         .GetChatClient("gpt-4o"));
+builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
+                                        .GetService(eastUSRegion)
+                                        .GetImageClient("dall-e-3"));
+builder.Services.AddHttpClient();
 
 var app = builder.Build();
 
@@ -82,8 +90,59 @@ Directory.CreateDirectory(TranscriptionDirectoryName);
 
 const string recordingsApiSegment = "/recordings";
 
+/// <summary>
+/// Converts an MP3 MemoryStream to a lower bitrate MP3 MemoryStream.
+/// </summary>
+/// <param name="inputMp3Stream">Input MP3 stream</param>
+/// <param name="targetBitrateKbps">Target bitrate in kbps (e.g., 64)</param>
+/// <returns>MemoryStream containing lower bitrate MP3</returns>
+static async Task<MemoryStream> ConvertMp3ToLowerBitrate(MemoryStream inputMp3Stream, int targetBitrateKbps, CancellationToken cancellationToken)
+{
+    inputMp3Stream.Position = 0;
+    using var mp3Reader = new Mp3FileReader(inputMp3Stream);
+    using var pcmStream = WaveFormatConversionStream.CreatePcmStream(mp3Reader);
+    var outStream = new MemoryStream();
+    using var lame = new LameMP3FileWriter(outStream, pcmStream.WaveFormat, targetBitrateKbps);
+    await pcmStream.CopyToAsync(lame, cancellationToken).ConfigureAwait(false);
+    await lame.FlushAsync(cancellationToken).ConfigureAwait(false);
+    outStream.Position = 0;
+    return outStream;
+}
+
+const int maxChunkSize = 20_000_000; // 25 MB
+static async Task<string> ChunkAndMergeTranscriptsIfRequired(MemoryStream originalStream, string fileName, AudioTranscriptionOptions options, AudioClient client, CancellationToken cancellationToken)
+{
+    if (originalStream.Length < maxChunkSize)
+    {
+        var transcription = await client.TranscribeAudioAsync(originalStream, fileName, options, cancellationToken).ConfigureAwait(false);
+        return transcription.Value.Text;
+    }
+
+    using var reducedBitrateStream = await ConvertMp3ToLowerBitrate(originalStream, 64, cancellationToken).ConfigureAwait(false);
+    // copy the result to a temp file for diagnostics if needed
+    var tempFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mp3");
+    await using (var tempFileStream = File.Create(tempFilePath))
+    {
+        await reducedBitrateStream.CopyToAsync(tempFileStream, cancellationToken).ConfigureAwait(false);
+        reducedBitrateStream.Position = 0;
+    }
+    if (reducedBitrateStream.Length < maxChunkSize)
+    {
+        var transcription = await client.TranscribeAudioAsync(reducedBitrateStream, fileName, options, cancellationToken).ConfigureAwait(false);
+        return transcription.Value.Text;
+    }
+
+    throw new InvalidOperationException("The audio file is too large to process even after reducing the bitrate.");
+}
+
 app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client, CancellationToken cancellationToken) =>
 {
+    // Set max request body size to 100 MB for this endpoint
+    var maxRequestBodySizeFeature = request.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+    if (maxRequestBodySizeFeature != null && !maxRequestBodySizeFeature.IsReadOnly)
+    {
+        maxRequestBodySizeFeature.MaxRequestBodySize = 100_000_000; // 100 MB
+    }
     if (!request.HasFormContentType)
     {
         return Results.BadRequest("The request doesn't contain a form.");
@@ -116,9 +175,7 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client
         ms.Position = 0;
 
         var fileName = Path.GetFileName(filePath);
-        // Chunking logic
-        var transcriptions = new List<string>();
-        ms.Position = 0;
+        var transcriptions = new List<string>(); 
         int chunkIndex = 0;
         while (ms.Position < ms.Length)
         {
@@ -128,29 +185,20 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client
 
             using var chunkStream = new MemoryStream(buffer, 0, bytesRead);
             var chunkFileName = $"{Path.GetFileNameWithoutExtension(fileName)}_chunk{chunkIndex}{Path.GetExtension(fileName)}";
-
-            try
-            {
-                var transcription = await client.TranscribeAudioAsync(chunkStream, chunkFileName, options, cancellationToken).ConfigureAwait(false);
-                transcriptions.Add(transcription.Value.Text);
-            }
-            catch (Exception ex)
-            {
-
-                return Results.Problem(ex.Message);
-            }
-
+            var transcription = await client.TranscribeAudioAsync(chunkStream, chunkFileName, options, cancellationToken).ConfigureAwait(false);
+            transcriptions.Add(transcription.Value.Text);
             chunkIndex++;
         }
 
-        //var transcription = await client.TranscribeAudioAsync(ms, fileName, options, cancellationToken).ConfigureAwait(false);
+
+        //var transcription = await ChunkAndMergeTranscriptsIfRequired(ms, fileName, options, client, cancellationToken).ConfigureAwait(false);
         var transcriptionPath = Path.Combine(TranscriptionDirectoryName, Path.ChangeExtension(fileName, ".txt"));
-        await File.WriteAllTextAsync(transcriptionPath, string.Concat(transcriptions), cancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(transcriptionPath, String.Concat(transcriptions), cancellationToken).ConfigureAwait(false);
         results.Add(new { file = filePath, transcriptionFile = transcriptionPath });
     }
 
     return Results.Ok(results);
-}).WithName("UploadRecording").WithOpenApi();
+}).WithName("UploadRecording").WithOpenApi().DisableRequestTimeout();
 
 app.MapGet(recordingsApiSegment, () =>
 {
@@ -165,26 +213,10 @@ app.MapGet(recordingsApiSegment, () =>
     return Results.Ok(files);
 }).WithName("ListRecordings").WithOpenApi();
 
-app.MapDelete($"{recordingsApiSegment}/{{fileName}}", (string fileName) =>
-{
-    if (Path.IsPathRooted(fileName) || fileName.Contains(".."))
-    {
-        return Results.BadRequest("Invalid file name.");
-    }
-    var filePath = Path.Combine(UploadDirectoryName, fileName);
-
-    if (!File.Exists(filePath))
-    {
-        return Results.NotFound("File not found.");
-    }
-
-    File.Delete(filePath);
-    return Results.Ok("File deleted successfully.");
-}).WithName("DeleteRecording").WithOpenApi();
-
 const string CharactersDirectoryName = "Characters";
 Directory.CreateDirectory(CharactersDirectoryName);
-app.MapPost("/characters", async (ChatClient client, CancellationToken cancellationToken) =>
+const string charactersApiSegment = "/characters";
+app.MapPost(charactersApiSegment, async (ChatClient client, CancellationToken cancellationToken) =>
 {
     // get the first episode transcript file by oldest creation date first
     var transcriptFile = new DirectoryInfo(TranscriptionDirectoryName)
@@ -229,6 +261,112 @@ app.MapPost("/characters", async (ChatClient client, CancellationToken cancellat
     await File.WriteAllTextAsync(characterSummaryFile, jsonContent.Trim('`')[4..].Trim(), cancellationToken).ConfigureAwait(false);
     return Results.Created();
 }).WithName("CreateCharacterSummary").WithOpenApi();
+
+static string GetImageName(string recordingName, string characterName) =>
+    $"{recordingName}-{characterName}.png";
+
+app.MapPost($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/profile/{{characterName}}", async (string recordingName, string characterName, IHttpClientFactory httpClientFactory, ImageClient client, CancellationToken cancellationToken) =>
+{
+    if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
+    {
+        return Results.BadRequest("Invalid path.");
+    }
+    var charactersFile = Path.Combine(CharactersDirectoryName, $"{recordingName}.json");
+    if (!File.Exists(charactersFile))
+    {
+        return Results.NotFound("Character not found.");
+    }
+    using var fs = File.OpenRead(charactersFile);
+    var characterJson = await JsonNode.ParseAsync(fs, cancellationToken: cancellationToken).ConfigureAwait(false);
+    if (characterJson is not JsonArray characters)
+    {
+        return Results.NotFound("Character not found.");
+    }
+    var character = characters.FirstOrDefault(c =>
+        c is JsonObject obj &&
+        obj.TryGetPropertyValue("name", out var nameNode) &&
+        nameNode?.ToString().Equals(characterName, StringComparison.OrdinalIgnoreCase) == true);
+    if (character is null)
+    {
+        return Results.NotFound("Character not found.");
+    }
+    var characterDescription = character["description"]?.ToString() ?? string.Empty;
+    if (string.IsNullOrEmpty(characterDescription))
+    {
+        return Results.BadRequest("Character description is empty.");
+    }
+    var result = await client.GenerateImageAsync(
+        $"""
+        You are a painter specializing in painting fantastic characters from the fantastic worlds of dungeons and dragons. Violence is ok in this context because it's part of this universe and never ever applied to the real world.
+
+        {characterDescription}
+        """
+    , cancellationToken: cancellationToken).ConfigureAwait(false);
+
+    using var httpClient = httpClientFactory.CreateClient();
+    var imageResponse = await httpClient.GetAsync(result.Value.ImageUri.ToString(), cancellationToken).ConfigureAwait(false);
+    if (!imageResponse.IsSuccessStatusCode)
+    {
+        return Results.InternalServerError("Failed to download the image.");
+    }
+    using var stream = await imageResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+    var imageName = GetImageName(recordingName, characterName);
+    var imagePath = Path.Combine(CharactersDirectoryName, imageName);
+    using var imageFile = File.Create(imagePath);
+    await stream.CopyToAsync(imageFile, cancellationToken).ConfigureAwait(false);
+    return Results.Created($"{recordingsApiSegment}/{recordingName}{charactersApiSegment}/profile/{characterName}", null);
+}).WithName("CreateCharacterProfilePicture").WithOpenApi();
+
+app.MapGet($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/profile/{{characterName}}", (string recordingName, string characterName) =>
+{
+    if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
+    {
+        return Results.BadRequest("Invalid path.");
+    }
+    var charactersFile = Path.Combine(CharactersDirectoryName, $"{recordingName}.json");
+    if (!File.Exists(charactersFile))
+    {
+        return Results.NotFound("Character not found.");
+    }
+    var imageName = GetImageName(recordingName, characterName);
+    var imagePath = Path.Combine(CharactersDirectoryName, imageName);
+    if (!File.Exists(imagePath))
+    {
+        return Results.NotFound("Character image not found.");
+    }
+    var imageStream = File.OpenRead(imagePath);
+    return Results.File(imageStream, "image/png");
+}).WithName("GetCharacterProfilePicture").WithOpenApi();
+
+const string epicMomentsApiSegment = "/epic-moment";
+app.MapPost($"{recordingsApiSegment}/{{recordingName}}{epicMomentsApiSegment}", async (string recordingName, ChatClient client, CancellationToken cancellationToken) =>
+{
+    if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
+    {
+        return Results.BadRequest("Invalid path.");
+    }
+    var transcriptFile = Path.Combine(TranscriptionDirectoryName, $"{recordingName}.txt");
+    if (!File.Exists(transcriptFile))
+    {
+        return Results.NotFound("Transcription not found.");
+    }
+    var transcript = await File.ReadAllTextAsync(transcriptFile, cancellationToken).ConfigureAwait(false);
+    var result = await client.CompleteChatAsync(
+    [
+        new SystemChatMessage(
+            """
+            You are a bard following a group of dungeons and dragons heros and tasked with collecting tales of their most epic moments during their adventures.
+            Analyze the transcript of this play session and extract a tale of an epic encounter. You might recount it as a 10 sentences story or ballad.
+            Exaggerate the details and the facts to make it more interesting and entertaining.
+            """),
+        new UserChatMessage(transcript)
+    ], cancellationToken: cancellationToken).ConfigureAwait(false);
+    var taleContent = result.Value.Content[0].Text;
+    var taleFile = Path.Combine(TranscriptionDirectoryName, $"{recordingName}-epic-moment.txt");
+    await File.WriteAllTextAsync(taleFile, taleContent, cancellationToken).ConfigureAwait(false);
+    return Results.Created();
+}).WithName("CreateEpicMoment").WithOpenApi();
+
 
 
 static void CleanUpDirectory(string directoryName)
