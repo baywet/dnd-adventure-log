@@ -10,6 +10,7 @@ using OpenAI.Chat;
 using System.Text.Json.Nodes;
 using OpenAI.Images;
 using System.ClientModel;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -296,7 +297,9 @@ app.MapPost($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/pro
     var character = characters.FirstOrDefault(c =>
         c is JsonObject obj &&
         obj.TryGetPropertyValue("name", out var nameNode) &&
-        nameNode?.ToString().Equals(characterName, StringComparison.OrdinalIgnoreCase) == true);
+        nameNode is JsonValue jsonValue &&
+        jsonValue.GetValueKind() is JsonValueKind.String &&
+        jsonValue.GetValue<string>().Equals(characterName, StringComparison.OrdinalIgnoreCase));
     if (character is null)
     {
         return Results.NotFound("Character not found.");
