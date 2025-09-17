@@ -75,6 +75,21 @@ app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaig
     return Results.Created($"{Constants.CampaignsApiSegment}/{campaignName}", null);
 }).WithName("CreateCampaign").WithOpenApi();
 
+app.MapDelete($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaignName) =>
+{
+    if (Path.IsPathRooted(campaignName) || campaignName.Contains("..", StringComparison.Ordinal))
+    {
+        return Results.BadRequest("Name contains invalid characters.");
+    }
+    var campaignPath = Path.Combine(Constants.CampaignsDirectoryName, campaignName);
+    if (!Directory.Exists(campaignPath))
+    {
+        return Results.NotFound("Campaign does not exist.");
+    }
+    Directory.Delete(campaignPath, true);
+    return Results.Accepted();
+}).WithName("CleanApp").WithOpenApi();
+
 app.MapPost(Constants.RecordingsApiSegment, async (HttpRequest request, AudioClient client, CancellationToken cancellationToken) =>
 {
     // Set max request body size to 100 MB for this endpoint
@@ -427,14 +442,5 @@ static void CleanUpDirectory(string directoryName)
         file.Delete();
     }
 }
-
-app.MapDelete("/clean-app", () =>
-{
-    CleanUpDirectory(Constants.UploadDirectoryName);
-    CleanUpDirectory(Constants.TranscriptionDirectoryName);
-    CleanUpDirectory(Constants.CharactersDirectoryName);
-    return Results.Accepted();
-}).WithName("CleanApp").WithOpenApi();
-
 
 await app.RunAsync();
