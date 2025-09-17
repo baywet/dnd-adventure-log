@@ -9,6 +9,7 @@ using System.Text.Json.Nodes;
 using OpenAI.Images;
 using System.ClientModel;
 using System.Text.Json;
+using System.Reflection.Metadata;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,6 +59,21 @@ app.MapGet(Constants.CampaignsApiSegment, () =>
 
     return Results.Ok(campaignNames);
 }).WithName("ListCampaigns").WithOpenApi();
+
+app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaignName) =>
+{
+    if (Path.IsPathRooted(campaignName) || campaignName.Contains("..", StringComparison.Ordinal))
+    {
+        return Results.BadRequest("Name contains invalid characters.");
+    }
+    var campaignPath = Path.Combine(Constants.CampaignsDirectoryName, campaignName);
+    if (Directory.Exists(campaignPath))
+    {
+        return Results.Conflict("Campaign already exists.");
+    }
+    Directory.CreateDirectory(campaignPath);
+    return Results.Created($"{Constants.CampaignsApiSegment}/{campaignName}", null);
+}).WithName("CreateCampaign").WithOpenApi();
 
 app.MapPost(Constants.RecordingsApiSegment, async (HttpRequest request, AudioClient client, CancellationToken cancellationToken) =>
 {
