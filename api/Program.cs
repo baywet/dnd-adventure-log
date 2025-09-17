@@ -225,6 +225,21 @@ app.MapPost(charactersApiSegment, async (ChatClient client, CancellationToken ca
 static string GetImageName(string recordingName, string characterName) =>
     $"{recordingName}-{characterName}.png";
 
+app.MapGet($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}", (string recordingName) =>
+{
+    if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
+    {
+        return Results.BadRequest("Invalid path.");
+    }
+    var charactersFile = Path.Combine(CharactersDirectoryName, $"{recordingName}.json");
+    if (!File.Exists(charactersFile))
+    {
+        return Results.NotFound("Character not found.");
+    }
+    var fs = File.OpenRead(charactersFile);
+    return Results.File(fs, "application/json");
+}).WithName("GetCharacters").WithOpenApi();
+
 app.MapPost($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/profile/{{characterName}}", async (string recordingName, string characterName, IHttpClientFactory httpClientFactory, ImageClient client, CancellationToken cancellationToken) =>
 {
     if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
