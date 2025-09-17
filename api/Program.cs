@@ -108,15 +108,15 @@ static async Task<string> ChunkAndMergeTranscriptsIfRequired(MemoryStream origin
     }
 
     // Split into 25-minute chunks
-    var transcriptions = new List<string>();
     int chunkIndex = 0;
+    var chunks = new List<Tuple<string, MemoryStream>>();
     while (mp3Reader.CurrentTime.TotalSeconds < totalDuration)
     {
         var chunkStart = mp3Reader.CurrentTime;
         var chunkEnd = TimeSpan.FromSeconds(Math.Min(chunkStart.TotalSeconds + chunkDurationSeconds, totalDuration));
         var chunkFileName = $"{Path.GetFileNameWithoutExtension(fileName)}-chunk{chunkIndex}.mp3";
 
-        using var chunkStream = new MemoryStream();
+        var chunkStream = new MemoryStream();
         Mp3Frame frame;
         while ((frame = mp3Reader.ReadNextFrame()) != null)
         {
@@ -126,11 +126,22 @@ static async Task<string> ChunkAndMergeTranscriptsIfRequired(MemoryStream origin
             await chunkStream.WriteAsync(frame.RawData.AsMemory(0, frame.RawData.Length), cancellationToken).ConfigureAwait(false);
         }
         chunkStream.Position = 0;
-        using var convertedChunkStream = await ConvertMp3ToLowerBitrate(chunkStream, cancellationToken).ConfigureAwait(false);
+        var convertedChunkStream = await ConvertMp3ToLowerBitrate(chunkStream, cancellationToken).ConfigureAwait(false);
+        if (convertedChunkStream != chunkStream)
+        {
+            await chunkStream.DisposeAsync();
+        }
 
-        var transcription = await client.TranscribeAudioAsync(convertedChunkStream, chunkFileName, options, cancellationToken).ConfigureAwait(false);
-        transcriptions.Add(transcription.Value.Text);
+        chunks.Add(new(chunkFileName, convertedChunkStream));
         chunkIndex++;
+    }
+    var transcriptions = (await Task.WhenAll(chunks.Select((c) => client.TranscribeAudioAsync(c.Item2, c.Item1, options, cancellationToken))).ConfigureAwait(false))
+                        .Select(static t => t.Value.Text)
+                        .ToArray();
+
+    foreach (var chunk in chunks.Select(static c => c.Item2))
+    {
+        await chunk.DisposeAsync();
     }
 
     return string.Join("\n", transcriptions);
