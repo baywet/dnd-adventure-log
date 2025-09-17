@@ -373,8 +373,10 @@ app.MapGet($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/prof
 }).WithName("GetCharacterProfilePicture").WithOpenApi();
 
 const string epicMomentsApiSegment = "/epic-moment";
-static string GetEpicMomentFileName(string recordingName) =>
+static string GetEpicMomentTextFileName(string recordingName) =>
     $"{recordingName}-epic-moment.txt";
+static string GetEpicMomentVideoFileName(string recordingName) =>
+    Path.ChangeExtension(GetEpicMomentTextFileName(recordingName), ".mp4");
 
 async Task<Stream?> GetEpicMomentVideoAsync(string recounting, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
 {
@@ -460,14 +462,14 @@ app.MapPost($"{recordingsApiSegment}/{{recordingName}}{epicMomentsApiSegment}", 
         new UserChatMessage(transcript)
     ], cancellationToken: cancellationToken).ConfigureAwait(false);
     var taleContent = result.Value.Content[0].Text;
-    var taleFile = Path.Combine(TranscriptionDirectoryName, GetEpicMomentFileName(recordingName));
+    var taleFile = Path.Combine(TranscriptionDirectoryName, GetEpicMomentTextFileName(recordingName));
     await File.WriteAllTextAsync(taleFile, taleContent, cancellationToken).ConfigureAwait(false);
     using var epicMomentVideo = await GetEpicMomentVideoAsync(taleContent, httpClientFactory, cancellationToken).ConfigureAwait(false);
     if (epicMomentVideo is null)
     {
         return Results.StatusCode(500);
     }
-    var epicMomentVideoPath = Path.ChangeExtension(taleFile, ".mp4");
+    var epicMomentVideoPath = GetEpicMomentVideoFileName(recordingName);
     using var videoFile = File.Create(epicMomentVideoPath);
     await epicMomentVideo.CopyToAsync(videoFile, cancellationToken).ConfigureAwait(false);
     return Results.Created();
@@ -479,12 +481,7 @@ app.MapGet($"{recordingsApiSegment}/{{recordingName}}{epicMomentsApiSegment}", (
     {
         return Results.BadRequest("Invalid path.");
     }
-    var taleFile = Path.Combine(TranscriptionDirectoryName, GetEpicMomentFileName(recordingName));
-    if (!File.Exists(taleFile))
-    {
-        return Results.NotFound("Epic moment not found.");
-    }
-    var epicMomentVideoPath = Path.ChangeExtension(taleFile, ".mp4");
+    var epicMomentVideoPath = GetEpicMomentVideoFileName(recordingName);
     if (!File.Exists(epicMomentVideoPath))
     {
         return Results.NotFound("Epic moment video not found.");
