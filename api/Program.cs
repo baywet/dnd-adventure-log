@@ -46,74 +46,10 @@ var app = builder.Build();
 app.AddOpenAPI();
 app.UseHttpsRedirection();
 app.AddCampaignOperations();
+app.AddRecordingOperations();
 
-Directory.CreateDirectory(Constants.UploadDirectoryName);
-Directory.CreateDirectory(Constants.TranscriptionDirectoryName);
 Directory.CreateDirectory(Constants.CampaignsDirectoryName);
 
-app.MapPost(Constants.RecordingsApiSegment, async (HttpRequest request, AudioClient client, CancellationToken cancellationToken) =>
-{
-    // Set max request body size to 100 MB for this endpoint
-    var maxRequestBodySizeFeature = request.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
-    if (maxRequestBodySizeFeature != null && !maxRequestBodySizeFeature.IsReadOnly)
-    {
-        maxRequestBodySizeFeature.MaxRequestBodySize = 100_000_000; // 100 MB
-    }
-    if (!request.HasFormContentType)
-    {
-        return Results.BadRequest("The request doesn't contain a form.");
-    }
-
-    var form = request.Form;
-
-    if (form.Files.Count == 0)
-    {
-        return Results.BadRequest("No files were uploaded.");
-    }
-    var options = new AudioTranscriptionOptions
-    {
-        ResponseFormat = AudioTranscriptionFormat.Text,
-        TimestampGranularities = AudioTimestampGranularities.Word | AudioTimestampGranularities.Segment,
-    };
-
-    var results = new List<object>();
-    foreach (var file in form.Files)
-    {
-        // Process each uploaded file here
-        // For example, you can save the file to a specific location
-        var filePath = Path.Combine(Constants.UploadDirectoryName, file.FileName);
-
-        using var fileStream = File.Create(filePath);
-        using var ms = new MemoryStream();
-        await file.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
-        ms.Position = 0;
-        await ms.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
-        ms.Position = 0;
-
-        var fileName = Path.GetFileName(filePath);
-        var transcription = await AudioHelper.ChunkAndMergeTranscriptsIfRequired(ms, fileName, options, client, cancellationToken).ConfigureAwait(false);
-        var transcriptionPath = Path.Combine(Constants.TranscriptionDirectoryName, Path.ChangeExtension(fileName, ".txt"));
-        await File.WriteAllTextAsync(transcriptionPath, transcription, cancellationToken).ConfigureAwait(false);
-        results.Add(new { file = filePath, transcriptionFile = transcriptionPath });
-    }
-
-    return Results.Ok(results);
-}).WithName("UploadRecording").WithOpenApi().DisableRequestTimeout();
-
-app.MapGet(Constants.RecordingsApiSegment, () =>
-{
-    var files = Directory.GetFiles(Constants.UploadDirectoryName)
-        .Select(filePath => new
-        {
-            FileName = Path.GetFileName(filePath),
-            Url = $"{Constants.RecordingsApiSegment}/{Path.GetFileName(filePath)}"
-        })
-        .ToList();
-
-    return Results.Ok(files);
-}).WithName("ListRecordings").WithOpenApi();
-
-Directory.CreateDirectory(Constants.CharactersDirectoryName);
 app.MapPost(Constants.CharactersApiSegment, async (ChatClient client, CancellationToken cancellationToken) =>
 {
     // get the first episode transcript file by oldest creation date first
