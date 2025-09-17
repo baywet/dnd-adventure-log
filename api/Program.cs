@@ -73,43 +73,61 @@ const string recordingsApiSegment = "/recordings";
 /// <param name="inputMp3Stream">Input MP3 stream</param>
 /// <param name="targetBitrateKbps">Target bitrate in kbps (e.g., 64)</param>
 /// <returns>MemoryStream containing lower bitrate MP3</returns>
-static async Task<MemoryStream> ConvertMp3ToLowerBitrate(MemoryStream inputMp3Stream, int targetBitrateKbps, CancellationToken cancellationToken)
+static async Task<MemoryStream> ConvertMp3ToLowerBitrate(MemoryStream inputMp3Stream, CancellationToken cancellationToken)
 {
     inputMp3Stream.Position = 0;
     using var mp3Reader = new Mp3FileReader(inputMp3Stream);
     using var pcmStream = WaveFormatConversionStream.CreatePcmStream(mp3Reader);
     var outStream = new MemoryStream();
-    using var lame = new LameMP3FileWriter(outStream, pcmStream.WaveFormat, targetBitrateKbps);
+    using var lame = new LameMP3FileWriter(outStream, pcmStream.WaveFormat, LAMEPreset.ABR_64);
     await pcmStream.CopyToAsync(lame, cancellationToken).ConfigureAwait(false);
     await lame.FlushAsync(cancellationToken).ConfigureAwait(false);
     outStream.Position = 0;
     return outStream;
 }
 
-const int maxChunkSize = 25_000_000; // 25 MB
+const int maxChunkSize = 26_214_400; // 25 MB
+const int chunkDurationSeconds = 20 * 60; // 20 minutes
 static async Task<string> ChunkAndMergeTranscriptsIfRequired(MemoryStream originalStream, string fileName, AudioTranscriptionOptions options, AudioClient client, CancellationToken cancellationToken)
 {
-    if (originalStream.Length < maxChunkSize)
+
+    originalStream.Position = 0;
+    using var mp3Reader = new Mp3FileReader(originalStream);
+    var totalDuration = mp3Reader.TotalTime.TotalSeconds;
+
+    if (totalDuration <= chunkDurationSeconds)
     {
+        originalStream.Position = 0;
         var transcription = await client.TranscribeAudioAsync(originalStream, fileName, options, cancellationToken).ConfigureAwait(false);
         return transcription.Value.Text;
     }
 
-    using var reducedBitrateStream = await ConvertMp3ToLowerBitrate(originalStream, 64, cancellationToken).ConfigureAwait(false);
-    // copy the result to a temp file for diagnostics if needed
-    var tempFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mp3");
-    await using (var tempFileStream = File.Create(tempFilePath))
+    // Split into 25-minute chunks
+    var transcriptions = new List<string>();
+    int chunkIndex = 0;
+    while (mp3Reader.CurrentTime.TotalSeconds < totalDuration)
     {
-        await reducedBitrateStream.CopyToAsync(tempFileStream, cancellationToken).ConfigureAwait(false);
-        reducedBitrateStream.Position = 0;
-    }
-    if (reducedBitrateStream.Length < maxChunkSize)
-    {
-        var transcription = await client.TranscribeAudioAsync(reducedBitrateStream, fileName, options, cancellationToken).ConfigureAwait(false);
-        return transcription.Value.Text;
+        var chunkStart = mp3Reader.CurrentTime;
+        var chunkEnd = TimeSpan.FromSeconds(Math.Min(chunkStart.TotalSeconds + chunkDurationSeconds, totalDuration));
+        var chunkFileName = $"{Path.GetFileNameWithoutExtension(fileName)}-chunk{chunkIndex}.mp3";
+
+        using var chunkStream = new MemoryStream();
+        Mp3Frame frame;
+        while ((frame = mp3Reader.ReadNextFrame()) != null)
+        {
+            var frameTime = mp3Reader.CurrentTime;
+            if (frameTime > chunkEnd)
+                break;
+            await chunkStream.WriteAsync(frame.RawData.AsMemory(0, frame.RawData.Length), cancellationToken).ConfigureAwait(false);
+        }
+        chunkStream.Position = 0;
+
+        var transcription = await client.TranscribeAudioAsync(chunkStream, chunkFileName, options, cancellationToken).ConfigureAwait(false);
+        transcriptions.Add(transcription.Value.Text);
+        chunkIndex++;
     }
 
-    throw new InvalidOperationException("The audio file is too large to process even after reducing the bitrate.");
+    return string.Join("\n", transcriptions);
 }
 
 app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client, CancellationToken cancellationToken) =>
