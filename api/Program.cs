@@ -9,7 +9,6 @@ using System.Text.Json.Nodes;
 using OpenAI.Images;
 using System.ClientModel;
 using System.Text.Json;
-using System.Reflection.Metadata;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,49 +45,11 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 app.AddOpenAPI();
 app.UseHttpsRedirection();
+app.AddCampaignOperations();
 
 Directory.CreateDirectory(Constants.UploadDirectoryName);
 Directory.CreateDirectory(Constants.TranscriptionDirectoryName);
 Directory.CreateDirectory(Constants.CampaignsDirectoryName);
-
-app.MapGet(Constants.CampaignsApiSegment, () =>
-{
-    var campaignNames = Directory.GetDirectories(Constants.CampaignsDirectoryName)
-        .Select(filePath => Path.GetFileName(filePath))
-        .ToArray();
-
-    return Results.Ok(campaignNames);
-}).WithName("ListCampaigns").WithOpenApi();
-
-app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaignName) =>
-{
-    if (Path.IsPathRooted(campaignName) || campaignName.Contains("..", StringComparison.Ordinal))
-    {
-        return Results.BadRequest("Name contains invalid characters.");
-    }
-    var campaignPath = Path.Combine(Constants.CampaignsDirectoryName, campaignName);
-    if (Directory.Exists(campaignPath))
-    {
-        return Results.Conflict("Campaign already exists.");
-    }
-    Directory.CreateDirectory(campaignPath);
-    return Results.Created($"{Constants.CampaignsApiSegment}/{campaignName}", null);
-}).WithName("CreateCampaign").WithOpenApi();
-
-app.MapDelete($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaignName) =>
-{
-    if (Path.IsPathRooted(campaignName) || campaignName.Contains("..", StringComparison.Ordinal))
-    {
-        return Results.BadRequest("Name contains invalid characters.");
-    }
-    var campaignPath = Path.Combine(Constants.CampaignsDirectoryName, campaignName);
-    if (!Directory.Exists(campaignPath))
-    {
-        return Results.NotFound("Campaign does not exist.");
-    }
-    Directory.Delete(campaignPath, true);
-    return Results.Accepted();
-}).WithName("CleanApp").WithOpenApi();
 
 app.MapPost(Constants.RecordingsApiSegment, async (HttpRequest request, AudioClient client, CancellationToken cancellationToken) =>
 {
@@ -428,19 +389,5 @@ app.MapGet($"{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMo
     var videoStream = File.OpenRead(epicMomentVideoPath);
     return Results.File(videoStream, "video/mp4", Path.GetFileName(epicMomentVideoPath));
 }).WithName("GetEpicMoment").WithOpenApi();
-
-
-static void CleanUpDirectory(string directoryName)
-{
-    if (!Directory.Exists(directoryName))
-    {
-        return;
-    }
-    var directoryInfo = new DirectoryInfo(directoryName);
-    foreach (var file in directoryInfo.GetFiles())
-    {
-        file.Delete();
-    }
-}
 
 await app.RunAsync();
