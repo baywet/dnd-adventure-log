@@ -6,6 +6,7 @@ import { ResultsView } from "./components/ResultsView";
 import { ApiService } from "./services/api.service";
 import type { Player, Players, Transcription, Transcriptions } from "./types";
 import { ProcessState } from "./types";
+import { ApiAxiomService } from "./services/api.axiom.service";
 
 const App: React.FC = () => {
   const [processState, setProcessState] = useState<ProcessState>(
@@ -41,50 +42,46 @@ const App: React.FC = () => {
     setUploadedFiles(files);
 
     try {
-      setLoadingMessage("Consulting the arcane orbs to identify the heroes...");
+      setLoadingMessage("Asking our scrybe to write down the legend...");
       setProcessState(ProcessState.Processing);
 
-      var transcript = await ApiService.uploadRecording(files).catch((err) => {
+      // 1. Upload recording
+      const transcriptResult = await ApiService.uploadRecording(files).catch((err) => {
         console.error("Failed to upload recordings:", err);
         setProcessState(ProcessState.Error);
         return [];
       });
-      
-      setTranscript(transcript.map((t) => t.transcription).join("\n") || "");
+      setTranscript(transcriptResult.map((t) => t.transcription).join("\n") || "");
 
-      var playersResult = await ApiService.listCharacters().catch((err) => {
+      // Assume the API returns the recording name in the result, or derive it from the file name
+      // For this example, use the first file's name (adjust as needed)
+      const recordingName = files[0]?.name;
+      if (!recordingName) throw new Error("No recording name found.");
+
+      // 2. POST /characters to generate data for this recording
+      setLoadingMessage("Summoning the heroes from the legend...");
+      await ApiService.generateCharacters(recordingName);
+
+      // 3. List characters for this recording
+      setLoadingMessage("Consulting the arcane orbs to identify the heroes...");
+      const playersResult = await ApiService.listCharacters(recordingName).catch((err) => {
         console.error("Failed to get players:", err);
         setProcessState(ProcessState.Error);
-        return "[]";
+        return [];
       });
+      setPlayers(playersResult);
 
-      setPlayers(JSON.parse(playersResult));
-
-      // Step 2: Identify Players
-      // const playersToVisualize = await analyzeTranscriptForPlayers(generatedTranscript);
-      // if (playersToVisualize.length === 0) {
-      //   throw new Error("The ancient texts revealed no clear heroes. Please try another recording.");
-      // }
-
-      // // Step 3: Generate Portraits
-      // setLoadingMessage(`Capturing the essence of ${playersToVisualize.length} heroes onto canvas...`);
-      // const portraitPromises = playersToVisualize.map(async (player) => {
-      //   const imageData = await generatePlayerPortrait(player.description);
-      //   return { name: player.name, description: player.description, portraitUrl: `data:image/png;base64,${imageData}` };
-      // });
-      // const generatedPlayers = await Promise.all(portraitPromises);
-      // setPlayers(generatedPlayers);
-
-      // // Step 4: Find Epic Moment
-      // setLoadingMessage('Scouring the chronicles for the most epic moment...');
-      // const epicMomentPrompt = await findEpicMoment(generatedTranscript);
-
-      // // Step 5: Generate Epic Video
-      // setLoadingMessage('Weaving the threads of destiny into a moving picture... (This may take several minutes)');
-      // const videoUrl = await generateEpicVideo(epicMomentPrompt, (message) => {
-      //    setLoadingMessage(message);
-      // });
-      // setEpicMomentVideoUrl(videoUrl);
+      // 4. For each player, POST character profile to generate portrait
+      setLoadingMessage("Capturing the essence of each hero onto canvas...");
+      await Promise.all(
+        playersResult.map(async (player) => {
+          try {
+            await ApiService.getPlayerPortrait(recordingName, player.name);
+          } catch (err) {
+            console.error(`Failed to generate portrait for ${player.name}:`, err);
+          }
+        })
+      );
 
       setProcessState(ProcessState.Success);
     } catch (err) {

@@ -79,4 +79,21 @@ export class ApiService {
     }
     return await response.json();
   }
+
+    static async getPlayerPortrait(recordingName: string, characterName: string): Promise<string> {
+    const response = await fetch(
+      `${API_BASE_URL}/recordings/${encodeURIComponent(recordingName)}/characters/profile/${encodeURIComponent(characterName)}`,
+      { method: 'POST' }
+    );
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    // Assuming the API returns a JSON with { url: string } or just the image URL as string
+    const data = await response.json();
+    // If API returns { url: string }
+    if (typeof data === 'object' && data.url) return data.url;
+    // If API returns the URL directly as string
+    if (typeof data === 'string') return data;
+    throw new Error('Invalid portrait response');
+  }
 }
