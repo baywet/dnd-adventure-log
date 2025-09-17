@@ -473,6 +473,25 @@ app.MapPost($"{recordingsApiSegment}/{{recordingName}}{epicMomentsApiSegment}", 
     return Results.Created();
 }).WithName("CreateEpicMoment").WithOpenApi();
 
+app.MapGet($"{recordingsApiSegment}/{{recordingName}}{epicMomentsApiSegment}", (string recordingName) =>
+{
+    if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
+    {
+        return Results.BadRequest("Invalid path.");
+    }
+    var taleFile = Path.Combine(TranscriptionDirectoryName, GetEpicMomentFileName(recordingName));
+    if (!File.Exists(taleFile))
+    {
+        return Results.NotFound("Epic moment not found.");
+    }
+    var epicMomentVideoPath = Path.ChangeExtension(taleFile, ".mp4");
+    if (!File.Exists(epicMomentVideoPath))
+    {
+        return Results.NotFound("Epic moment video not found.");
+    }
+    var videoStream = File.OpenRead(epicMomentVideoPath);
+    return Results.File(videoStream, "video/mp4", Path.GetFileName(epicMomentVideoPath));
+}).WithName("GetEpicMoment").WithOpenApi();
 
 
 static void CleanUpDirectory(string directoryName)
