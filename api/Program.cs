@@ -48,6 +48,16 @@ app.UseHttpsRedirection();
 
 Directory.CreateDirectory(Constants.UploadDirectoryName);
 Directory.CreateDirectory(Constants.TranscriptionDirectoryName);
+Directory.CreateDirectory(Constants.CampaignsDirectoryName);
+
+app.MapGet(Constants.CampaignsApiSegment, () =>
+{
+    var campaignNames = Directory.GetDirectories(Constants.CampaignsDirectoryName)
+        .Select(filePath => Path.GetFileName(filePath))
+        .ToArray();
+
+    return Results.Ok(campaignNames);
+}).WithName("ListCampaigns").WithOpenApi();
 
 app.MapPost(Constants.RecordingsApiSegment, async (HttpRequest request, AudioClient client, CancellationToken cancellationToken) =>
 {

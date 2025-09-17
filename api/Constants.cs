@@ -11,4 +11,6 @@ public static class Constants
 	public const string CharactersDirectoryName = "Characters";
 	public const string CharactersApiSegment = "/characters";
 	public const string EpicMomentsApiSegment = "/epic-moment";
+	public const string CampaignsDirectoryName = "Campaigns";
+	public const string CampaignsApiSegment = "/campaigns";
 }
