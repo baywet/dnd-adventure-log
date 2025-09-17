@@ -18,8 +18,6 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
-const string eastUS2Region = "EastUS2";
-const string eastUSRegion = "EastUS";
 builder.Services.AddSingleton<AzureNamedServicesHolder>(_ =>
 {
     AzureOpenAIClient createClient(string region) => new(
@@ -28,19 +26,19 @@ builder.Services.AddSingleton<AzureNamedServicesHolder>(_ =>
         new DefaultAzureCredential());
     return new(new(StringComparer.OrdinalIgnoreCase)
     {
-        { eastUS2Region, createClient(eastUS2Region) },
-        { eastUSRegion, createClient(eastUSRegion) },
+        { Constants.EastUS2Region, createClient(Constants.EastUS2Region) },
+        { Constants.EastUSRegion, createClient(Constants.EastUSRegion) },
     });
 });
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(eastUS2Region)
+                                        .GetService(Constants.EastUS2Region)
                                         .GetAudioClient("gpt-4o-transcribe"));
 
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(eastUS2Region)
+                                        .GetService(Constants.EastUS2Region)
                                         .GetChatClient("gpt-4o"));
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(eastUS2Region)
+                                        .GetService(Constants.EastUS2Region)
                                         .GetImageClient("gpt-image-1"));
 builder.Services.AddHttpClient();
 
@@ -61,12 +59,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-const string UploadDirectoryName = "Uploads";
-const string TranscriptionDirectoryName = "Transcriptions";
-Directory.CreateDirectory(UploadDirectoryName);
-Directory.CreateDirectory(TranscriptionDirectoryName);
+Directory.CreateDirectory(Constants.UploadDirectoryName);
+Directory.CreateDirectory(Constants.TranscriptionDirectoryName);
 
-const string recordingsApiSegment = "/recordings";
 
 const int maxChunkSize = 26_214_400; // 25 MB
 /// <summary>
@@ -148,7 +143,7 @@ static async Task<string> ChunkAndMergeTranscriptsIfRequired(MemoryStream origin
     return string.Join("\n", transcriptions);
 }
 
-app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client, CancellationToken cancellationToken) =>
+app.MapPost(Constants.RecordingsApiSegment, async (HttpRequest request, AudioClient client, CancellationToken cancellationToken) =>
 {
     // Set max request body size to 100 MB for this endpoint
     var maxRequestBodySizeFeature = request.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
@@ -178,7 +173,7 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client
     {
         // Process each uploaded file here
         // For example, you can save the file to a specific location
-        var filePath = Path.Combine(UploadDirectoryName, file.FileName);
+        var filePath = Path.Combine(Constants.UploadDirectoryName, file.FileName);
 
         using var fileStream = File.Create(filePath);
         using var ms = new MemoryStream();
@@ -189,7 +184,7 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client
 
         var fileName = Path.GetFileName(filePath);
         var transcription = await ChunkAndMergeTranscriptsIfRequired(ms, fileName, options, client, cancellationToken).ConfigureAwait(false);
-        var transcriptionPath = Path.Combine(TranscriptionDirectoryName, Path.ChangeExtension(fileName, ".txt"));
+        var transcriptionPath = Path.Combine(Constants.TranscriptionDirectoryName, Path.ChangeExtension(fileName, ".txt"));
         await File.WriteAllTextAsync(transcriptionPath, transcription, cancellationToken).ConfigureAwait(false);
         results.Add(new { file = filePath, transcriptionFile = transcriptionPath });
     }
@@ -197,26 +192,24 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client
     return Results.Ok(results);
 }).WithName("UploadRecording").WithOpenApi().DisableRequestTimeout();
 
-app.MapGet(recordingsApiSegment, () =>
+app.MapGet(Constants.RecordingsApiSegment, () =>
 {
-    var files = Directory.GetFiles(UploadDirectoryName)
+    var files = Directory.GetFiles(Constants.UploadDirectoryName)
         .Select(filePath => new
         {
             FileName = Path.GetFileName(filePath),
-            Url = $"/{UploadDirectoryName}/{Path.GetFileName(filePath)}"
+            Url = $"{Constants.RecordingsApiSegment}/{Path.GetFileName(filePath)}"
         })
         .ToList();
 
     return Results.Ok(files);
 }).WithName("ListRecordings").WithOpenApi();
 
-const string CharactersDirectoryName = "Characters";
-Directory.CreateDirectory(CharactersDirectoryName);
-const string charactersApiSegment = "/characters";
-app.MapPost(charactersApiSegment, async (ChatClient client, CancellationToken cancellationToken) =>
+Directory.CreateDirectory(Constants.CharactersDirectoryName);
+app.MapPost(Constants.CharactersApiSegment, async (ChatClient client, CancellationToken cancellationToken) =>
 {
     // get the first episode transcript file by oldest creation date first
-    var transcriptFile = new DirectoryInfo(TranscriptionDirectoryName)
+    var transcriptFile = new DirectoryInfo(Constants.TranscriptionDirectoryName)
         .GetFiles("*.txt")
         .OrderBy(static f => f.CreationTime)
         .FirstOrDefault();
@@ -254,7 +247,7 @@ app.MapPost(charactersApiSegment, async (ChatClient client, CancellationToken ca
         new UserChatMessage(transcript)
     ], cancellationToken: cancellationToken).ConfigureAwait(false);
     var jsonContent = result.Value.Content[0].Text;
-    var characterSummaryFile = Path.Combine(CharactersDirectoryName, Path.ChangeExtension(transcriptFile.Name, ".json"));
+    var characterSummaryFile = Path.Combine(Constants.CharactersDirectoryName, Path.ChangeExtension(transcriptFile.Name, ".json"));
     await File.WriteAllTextAsync(characterSummaryFile, jsonContent.Trim('`')[4..].Trim(), cancellationToken).ConfigureAwait(false);
     return Results.File(characterSummaryFile, "application/json");
 }).WithName("CreateCharacterSummary").WithOpenApi();
@@ -262,13 +255,13 @@ app.MapPost(charactersApiSegment, async (ChatClient client, CancellationToken ca
 static string GetImageName(string recordingName, string characterName) =>
     $"{recordingName}-{characterName}.png";
 
-app.MapGet($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}", (string recordingName) =>
+app.MapGet($"{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.CharactersApiSegment}", (string recordingName) =>
 {
     if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
     {
         return Results.BadRequest("Invalid path.");
     }
-    var charactersFile = Path.Combine(CharactersDirectoryName, $"{recordingName}.json");
+    var charactersFile = Path.Combine(Constants.CharactersDirectoryName, $"{recordingName}.json");
     if (!File.Exists(charactersFile))
     {
         return Results.NotFound("Character not found.");
@@ -277,13 +270,13 @@ app.MapGet($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}", (s
     return Results.File(fs, "application/json");
 }).WithName("GetCharacters").WithOpenApi();
 
-app.MapPost($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/profile/{{characterName}}", async (string recordingName, string characterName, IHttpClientFactory httpClientFactory, ImageClient client, CancellationToken cancellationToken) =>
+app.MapPost($"{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.CharactersApiSegment}/profile/{{characterName}}", async (string recordingName, string characterName, IHttpClientFactory httpClientFactory, ImageClient client, CancellationToken cancellationToken) =>
 {
     if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
     {
         return Results.BadRequest("Invalid path.");
     }
-    var charactersFile = Path.Combine(CharactersDirectoryName, $"{recordingName}.json");
+    var charactersFile = Path.Combine(Constants.CharactersDirectoryName, $"{recordingName}.json");
     if (!File.Exists(charactersFile))
     {
         return Results.NotFound("Character not found.");
@@ -319,10 +312,10 @@ app.MapPost($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/pro
 
     using var stream = await GetImageStreamFromResult(result, httpClientFactory, cancellationToken).ConfigureAwait(false);
     var imageName = GetImageName(recordingName, characterName);
-    var imagePath = Path.Combine(CharactersDirectoryName, imageName);
+    var imagePath = Path.Combine(Constants.CharactersDirectoryName, imageName);
     using var imageFile = File.Create(imagePath);
     await stream.CopyToAsync(imageFile, cancellationToken).ConfigureAwait(false);
-    return Results.Created($"{recordingsApiSegment}/{recordingName}{charactersApiSegment}/profile/{characterName}", null);
+    return Results.Created($"{Constants.RecordingsApiSegment}/{recordingName}{Constants.CharactersApiSegment}/profile/{characterName}", null);
 }).WithName("CreateCharacterProfilePicture").WithOpenApi();
 
 static async Task<Stream> GetImageStreamFromResult(ClientResult<GeneratedImage> result, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
@@ -351,19 +344,19 @@ static async Task<Stream> GetImageStreamFromResult(ClientResult<GeneratedImage> 
     return await imageResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 }
 
-app.MapGet($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/profile/{{characterName}}", (string recordingName, string characterName) =>
+app.MapGet($"{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.CharactersApiSegment}/profile/{{characterName}}", (string recordingName, string characterName) =>
 {
     if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
     {
         return Results.BadRequest("Invalid path.");
     }
-    var charactersFile = Path.Combine(CharactersDirectoryName, $"{recordingName}.json");
+    var charactersFile = Path.Combine(Constants.CharactersDirectoryName, $"{recordingName}.json");
     if (!File.Exists(charactersFile))
     {
         return Results.NotFound("Character not found.");
     }
     var imageName = GetImageName(recordingName, characterName);
-    var imagePath = Path.Combine(CharactersDirectoryName, imageName);
+    var imagePath = Path.Combine(Constants.CharactersDirectoryName, imageName);
     if (!File.Exists(imagePath))
     {
         return Results.NotFound("Character image not found.");
@@ -372,7 +365,6 @@ app.MapGet($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/prof
     return Results.File(imageStream, "image/png");
 }).WithName("GetCharacterProfilePicture").WithOpenApi();
 
-const string epicMomentsApiSegment = "/epic-moment";
 static string GetEpicMomentTextFileName(string recordingName) =>
     $"{recordingName}-epic-moment.txt";
 static string GetEpicMomentVideoFileName(string recordingName) =>
@@ -439,13 +431,13 @@ async static Task<Stream?> PollForVideoGenerationStatus(HttpClient client, strin
     }
 }
 
-app.MapPost($"{recordingsApiSegment}/{{recordingName}}{epicMomentsApiSegment}", async (string recordingName, ChatClient client, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken) =>
+app.MapPost($"{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", async (string recordingName, ChatClient client, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken) =>
 {
     if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
     {
         return Results.BadRequest("Invalid path.");
     }
-    var transcriptFile = Path.Combine(TranscriptionDirectoryName, $"{recordingName}.txt");
+    var transcriptFile = Path.Combine(Constants.TranscriptionDirectoryName, $"{recordingName}.txt");
     if (!File.Exists(transcriptFile))
     {
         return Results.NotFound("Transcription not found.");
@@ -462,7 +454,7 @@ app.MapPost($"{recordingsApiSegment}/{{recordingName}}{epicMomentsApiSegment}", 
         new UserChatMessage(transcript)
     ], cancellationToken: cancellationToken).ConfigureAwait(false);
     var taleContent = result.Value.Content[0].Text;
-    var taleFile = Path.Combine(TranscriptionDirectoryName, GetEpicMomentTextFileName(recordingName));
+    var taleFile = Path.Combine(Constants.TranscriptionDirectoryName, GetEpicMomentTextFileName(recordingName));
     await File.WriteAllTextAsync(taleFile, taleContent, cancellationToken).ConfigureAwait(false);
     using var epicMomentVideo = await GetEpicMomentVideoAsync(taleContent, httpClientFactory, cancellationToken).ConfigureAwait(false);
     if (epicMomentVideo is null)
@@ -475,7 +467,7 @@ app.MapPost($"{recordingsApiSegment}/{{recordingName}}{epicMomentsApiSegment}", 
     return Results.Created();
 }).WithName("CreateEpicMoment").WithOpenApi();
 
-app.MapGet($"{recordingsApiSegment}/{{recordingName}}{epicMomentsApiSegment}", (string recordingName) =>
+app.MapGet($"{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", (string recordingName) =>
 {
     if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
     {
@@ -506,9 +498,9 @@ static void CleanUpDirectory(string directoryName)
 
 app.MapDelete("/clean-app", () =>
 {
-    CleanUpDirectory(UploadDirectoryName);
-    CleanUpDirectory(TranscriptionDirectoryName);
-    CleanUpDirectory(CharactersDirectoryName);
+    CleanUpDirectory(Constants.UploadDirectoryName);
+    CleanUpDirectory(Constants.TranscriptionDirectoryName);
+    CleanUpDirectory(Constants.CharactersDirectoryName);
     return Results.Accepted();
 }).WithName("CleanApp").WithOpenApi();
 
