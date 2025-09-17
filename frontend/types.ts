@@ -1,9 +1,13 @@
-
 export interface Player {
   name: string;
   description: string;
+  level?: number | null;
+  race?: string | null;
   portraitUrl?: string;
+  fileUrl?: string;
 }
+
+export type Players = Player[];
 
 export enum ProcessState {
   Idle,
@@ -11,3 +15,10 @@ export enum ProcessState {
   Success,
   Error,
 }
+
+export interface Transcription {
+  file: string;
+  transcriptionFile: string;
+}
+
+export type Transcriptions = Transcription[];

@@ -5,6 +5,9 @@ using Azure.AI.OpenAI;
 using Azure.Identity;
 using api;
 using OpenAI.Chat;
+using Microsoft.AspNetCore.Http.Features;
+
+const int MaxChunkSize = 20 * 1024 * 1024; // 20MB
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +17,26 @@ builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 const string eastUS2Region = "EastUS2";
 const string eastUSRegion = "EastUS";
+
+builder.Services.Configure<FormOptions>(FormOptions =>
+{
+    FormOptions.MultipartBodyLengthLimit =
+        200 * 1024 * 1024;
+});
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 200 * 1024 * 1024;
+});
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll",
+        builder => builder.AllowAnyOrigin()
+                           .AllowAnyMethod()
+                           .AllowAnyHeader());
+});
+
 builder.Services.AddSingleton<AzureNamedServicesHolder>(_ =>
 {
     AzureOpenAIClient createClient(string region) => new(
@@ -27,11 +50,11 @@ builder.Services.AddSingleton<AzureNamedServicesHolder>(_ =>
     });
 });
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(eastUS2Region)
+                                        .GetService(eastUSRegion)
                                         .GetAudioClient("gpt-4o-transcribe"));
 
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(eastUS2Region)
+                                        .GetService(eastUSRegion)
                                         .GetChatClient("gpt-4o"));
 
 var app = builder.Build();
@@ -50,6 +73,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("AllowAll");
 
 const string UploadDirectoryName = "Uploads";
 const string TranscriptionDirectoryName = "Transcriptions";
@@ -92,9 +116,36 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client
         ms.Position = 0;
 
         var fileName = Path.GetFileName(filePath);
-        var transcription = await client.TranscribeAudioAsync(ms, fileName, options, cancellationToken).ConfigureAwait(false);
+        // Chunking logic
+        var transcriptions = new List<string>();
+        ms.Position = 0;
+        int chunkIndex = 0;
+        while (ms.Position < ms.Length)
+        {
+            int chunkSize = (int)Math.Min(MaxChunkSize, ms.Length - ms.Position);
+            byte[] buffer = new byte[chunkSize];
+            int bytesRead = await ms.ReadAsync(buffer, 0, chunkSize, cancellationToken).ConfigureAwait(false);
+
+            using var chunkStream = new MemoryStream(buffer, 0, bytesRead);
+            var chunkFileName = $"{Path.GetFileNameWithoutExtension(fileName)}_chunk{chunkIndex}{Path.GetExtension(fileName)}";
+
+            try
+            {
+                var transcription = await client.TranscribeAudioAsync(chunkStream, chunkFileName, options, cancellationToken).ConfigureAwait(false);
+                transcriptions.Add(transcription.Value.Text);
+            }
+            catch (Exception ex)
+            {
+
+                return Results.Problem(ex.Message);
+            }
+
+            chunkIndex++;
+        }
+
+        //var transcription = await client.TranscribeAudioAsync(ms, fileName, options, cancellationToken).ConfigureAwait(false);
         var transcriptionPath = Path.Combine(TranscriptionDirectoryName, Path.ChangeExtension(fileName, ".txt"));
-        await File.WriteAllTextAsync(transcriptionPath, transcription.Value.Text, cancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(transcriptionPath, string.Concat(transcriptions), cancellationToken).ConfigureAwait(false);
         results.Add(new { file = filePath, transcriptionFile = transcriptionPath });
     }
 
@@ -148,8 +199,8 @@ app.MapPost("/characters", async (ChatClient client, CancellationToken cancellat
     var transcript = await File.ReadAllTextAsync(transcriptFile.FullName, cancellationToken).ConfigureAwait(false);
 
     var result = await client.CompleteChatAsync(
-	[
-		new SystemChatMessage(
+    [
+        new SystemChatMessage(
             """
             You are a note taker assisting a group of dungeons and dragons players tasked with recording and putting together recaps of each play session so the dungeon master and players can get insights from previous sessions.
             The transcripts provided to you might contain dialogues that are not relevant to the game, you should ignore those.

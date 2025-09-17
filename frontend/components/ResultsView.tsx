@@ -17,9 +17,6 @@ interface ResultsViewProps {
 export const ResultsView: React.FC<ResultsViewProps> = ({ files, onDeleteFile, transcript, players, epicMomentVideoUrl, onReset }) => {
   return (
     <div className="space-y-12">
-
-      {/* Uploaded Files */}
-      <UploadedFiles files={files} onDelete={onDeleteFile} />
       
       {/* Heroes Gallery */}
       <section>
@@ -47,6 +44,10 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ files, onDeleteFile, t
         </div>
       </section>
       
+       {/* Uploaded Files */}
+      <UploadedFiles files={files} onDelete={onDeleteFile} />
+
+      {/* Reset Button */}
       <div className="text-center pt-8">
         <button
           onClick={onReset}

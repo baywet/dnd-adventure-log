@@ -1,6 +1,6 @@
-
 import React from 'react';
 import { TrashIcon } from './icons/TrashIcon';
+import { ApiService } from '@/services/api.service';
 
 interface UploadedFilesProps {
   files: File[];
@@ -11,6 +11,15 @@ export const UploadedFiles: React.FC<UploadedFilesProps> = ({ files, onDelete })
   if (files.length === 0) {
     return null;
   }
+
+  const handleDelete = async (index: number) => {
+    try {
+      await ApiService.deleteRecording(files[index].name);
+      onDelete(index);
+    } catch (error) {
+      alert('Failed to delete file.');
+    }
+  };
 
   return (
     <section>
@@ -23,7 +32,7 @@ export const UploadedFiles: React.FC<UploadedFilesProps> = ({ files, onDelete })
                 {file.name}
               </span>
               <button
-                onClick={() => onDelete(index)}
+                onClick={() => handleDelete(index)}
                 className="text-gray-500 hover:text-red-400 transition-colors duration-200 p-1 rounded-full hover:bg-gray-900/50"
                 aria-label={`Delete ${file.name}`}
               >
