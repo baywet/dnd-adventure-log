@@ -9,6 +9,7 @@ using api;
 using OpenAI.Chat;
 using System.Text.Json.Nodes;
 using OpenAI.Images;
+using System.ClientModel;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,8 +39,8 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHold
                                         .GetService(eastUS2Region)
                                         .GetChatClient("gpt-4o"));
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(eastUSRegion)
-                                        .GetImageClient("dall-e-3"));
+                                        .GetService(eastUS2Region)
+                                        .GetImageClient("gpt-image-1"));
 builder.Services.AddHttpClient();
 
 var app = builder.Build();
@@ -278,19 +279,39 @@ app.MapPost($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/pro
         """
     , cancellationToken: cancellationToken).ConfigureAwait(false);
 
-    using var httpClient = httpClientFactory.CreateClient();
-    var imageResponse = await httpClient.GetAsync(result.Value.ImageUri.ToString(), cancellationToken).ConfigureAwait(false);
-    if (!imageResponse.IsSuccessStatusCode)
-    {
-        return Results.InternalServerError("Failed to download the image.");
-    }
-    using var stream = await imageResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+    using var stream = await GetImageStreamFromResult(result, httpClientFactory, cancellationToken).ConfigureAwait(false);
     var imageName = GetImageName(recordingName, characterName);
     var imagePath = Path.Combine(CharactersDirectoryName, imageName);
     using var imageFile = File.Create(imagePath);
     await stream.CopyToAsync(imageFile, cancellationToken).ConfigureAwait(false);
     return Results.Created($"{recordingsApiSegment}/{recordingName}{charactersApiSegment}/profile/{characterName}", null);
 }).WithName("CreateCharacterProfilePicture").WithOpenApi();
+
+static async Task<Stream> GetImageStreamFromResult(ClientResult<GeneratedImage> result, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
+{
+    if (result?.Value is null)
+    {
+        throw new InvalidOperationException("Image generation failed.");
+    }
+
+    if (result.Value.ImageBytes is not null)
+    {
+        return result.Value.ImageBytes.ToStream();
+    }
+
+    if (result.Value?.ImageUri is null)
+    {
+        throw new InvalidOperationException("Image URI is missing.");
+    }
+
+    using var httpClient = httpClientFactory.CreateClient();
+    var imageResponse = await httpClient.GetAsync(result.Value.ImageUri.ToString(), cancellationToken).ConfigureAwait(false);
+    if (!imageResponse.IsSuccessStatusCode)
+    {
+        throw new InvalidOperationException("Failed to download the image.");
+    }
+    return await imageResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+}
 
 app.MapGet($"{recordingsApiSegment}/{{recordingName}}{charactersApiSegment}/profile/{{characterName}}", (string recordingName, string characterName) =>
 {
