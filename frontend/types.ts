@@ -19,6 +19,7 @@ export enum ProcessState {
 export interface Transcription {
   file: string;
   transcriptionFile: string;
+  transcription: string;
 }
 
 export type Transcriptions = Transcription[];

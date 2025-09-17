@@ -11,8 +11,11 @@ using Microsoft.AspNetCore.Http.Features;
 using System.Text.Json.Nodes;
 using OpenAI.Images;
 using System.ClientModel;
+using Microsoft.AspNetCore.Mvc.Formatters;
+using System.Net.Mime;
 
 const int MaxChunkSize = 20 * 1024 * 1024; // 20MB
+const string ApiKey = "5sQdBnDsK2JMIGAcGoZ34Gdwo8cRlThNORmOc5t0jkTmSPPPijm4JQQJ99BIACHYHv6XJ3w3AAAAACOGAmSG";
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,16 +26,16 @@ builder.Services.AddEndpointsApiExplorer();
 const string eastUS2Region = "EastUS2";
 const string eastUSRegion = "EastUS";
 
-builder.Services.Configure<FormOptions>(FormOptions =>
-{
-    FormOptions.MultipartBodyLengthLimit =
-        200 * 1024 * 1024;
-});
+//builder.Services.Configure<FormOptions>(FormOptions =>
+//{
+//    FormOptions.MultipartBodyLengthLimit =
+//        200 * 1024 * 1024;
+//});
 
-builder.WebHost.ConfigureKestrel(options =>
-{
-    options.Limits.MaxRequestBodySize = 200 * 1024 * 1024;
-});
+//builder.WebHost.ConfigureKestrel(options =>
+//{
+//    options.Limits.MaxRequestBodySize = 200 * 1024 * 1024;
+//});
 
 builder.Services.AddCors(options =>
 {
@@ -47,7 +50,7 @@ builder.Services.AddSingleton<AzureNamedServicesHolder>(_ =>
     AzureOpenAIClient createClient(string region) => new(
         new Uri(builder.Configuration[$"AzureOpenAI:{region}"] ??
                 throw new InvalidOperationException($"Please set the AzureOpenAI:{region} configuration value.")),
-        new DefaultAzureCredential());
+        new ApiKeyCredential(ApiKey));
     return new(new(StringComparer.OrdinalIgnoreCase)
     {
         { eastUS2Region, createClient(eastUS2Region) },
@@ -168,6 +171,13 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client
         // For example, you can save the file to a specific location
         var filePath = Path.Combine(UploadDirectoryName, file.FileName);
 
+        if (File.Exists(filePath))
+        {
+            var transcPath = Path.Combine(TranscriptionDirectoryName, Path.ChangeExtension(file.FileName, ".txt"));
+            results.Add(new { file = filePath, transcriptionFile = transcPath, transcription = File.ReadAllText(transcPath) });
+            continue;
+        }
+
         using var fileStream = File.Create(filePath);
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
@@ -176,7 +186,7 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client
         ms.Position = 0;
 
         var fileName = Path.GetFileName(filePath);
-        var transcriptions = new List<string>(); 
+        var transcriptions = new List<string>();
         int chunkIndex = 0;
         while (ms.Position < ms.Length)
         {
@@ -195,7 +205,7 @@ app.MapPost(recordingsApiSegment, async (HttpRequest request, AudioClient client
         //var transcription = await ChunkAndMergeTranscriptsIfRequired(ms, fileName, options, client, cancellationToken).ConfigureAwait(false);
         var transcriptionPath = Path.Combine(TranscriptionDirectoryName, Path.ChangeExtension(fileName, ".txt"));
         await File.WriteAllTextAsync(transcriptionPath, String.Concat(transcriptions), cancellationToken).ConfigureAwait(false);
-        results.Add(new { file = filePath, transcriptionFile = transcriptionPath });
+        results.Add(new { file = filePath, transcriptionFile = transcriptionPath, transcription = String.Concat(transcriptions) });
     }
 
     return Results.Ok(results);
@@ -257,10 +267,11 @@ app.MapPost(charactersApiSegment, async (ChatClient client, CancellationToken ca
             """),
         new UserChatMessage(transcript)
     ], cancellationToken: cancellationToken).ConfigureAwait(false);
-    var jsonContent = result.Value.Content[0].Text;
+    var jsonContent = result.Value.Content[0].Text.Trim('`')[4..].Trim();
     var characterSummaryFile = Path.Combine(CharactersDirectoryName, Path.ChangeExtension(transcriptFile.Name, ".json"));
-    await File.WriteAllTextAsync(characterSummaryFile, jsonContent.Trim('`')[4..].Trim(), cancellationToken).ConfigureAwait(false);
-    return Results.File(characterSummaryFile, "application/json");
+    await File.WriteAllTextAsync(characterSummaryFile, jsonContent, cancellationToken).ConfigureAwait(false);
+    //return Results.File(characterSummaryFile, "application/json");
+    return Results.Ok(jsonContent);
 }).WithName("CreateCharacterSummary").WithOpenApi();
 
 static string GetImageName(string recordingName, string characterName) =>

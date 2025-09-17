@@ -4,7 +4,7 @@ import { FileUpload } from "./components/FileUpload";
 import { ProcessingView } from "./components/ProcessingView";
 import { ResultsView } from "./components/ResultsView";
 import { ApiService } from "./services/api.service";
-import type { Player } from "./types";
+import type { Player, Players, Transcription, Transcriptions } from "./types";
 import { ProcessState } from "./types";
 
 const App: React.FC = () => {
@@ -43,52 +43,22 @@ const App: React.FC = () => {
     try {
       setLoadingMessage("Consulting the arcane orbs to identify the heroes...");
       setProcessState(ProcessState.Processing);
-      
-      var testResult = await ApiService.uploadRecording(files).catch((err) => {
+
+      var transcript = await ApiService.uploadRecording(files).catch((err) => {
         console.error("Failed to upload recordings:", err);
         setProcessState(ProcessState.Error);
+        return [];
       });
+      
+      setTranscript(transcript.map((t) => t.transcription).join("\n") || "");
 
-      var playres = await ApiService.listCharacters().catch((err) => {
+      var playersResult = await ApiService.listCharacters().catch((err) => {
         console.error("Failed to get players:", err);
         setProcessState(ProcessState.Error);
+        return "[]";
       });
 
-      // mock players
-      const mockPlayers: Player[] = [
-        {
-          name: "Thorin Oakenshield",
-          description: "A brave dwarven warrior with a mighty axe.",
-          level: 5,
-          race: "Dwarf",
-        },
-        {
-          name: "Elara Moonshadow",
-          description: "An elven ranger skilled with the bow and forest lore.",
-          level: 4,
-          race: "Elf",
-        },
-        {
-          name: "Milo Underbough",
-          description: "A clever halfling rogue with nimble fingers.",
-          level: 3,
-          race: "Halfling",
-        },
-        {
-          name: "Seraphina Brightstar",
-          description: "A human cleric devoted to the goddess of light.",
-          level: 6,
-          race: "Human",
-        },
-        {
-          name: "Gorak the Wise",
-          description: "A half-orc wizard with a mysterious past.",
-          level: 7,
-          race: "Half-Orc",
-        },
-      ];
-
-      setPlayers(mockPlayers);
+      setPlayers(JSON.parse(playersResult));
 
       // Step 2: Identify Players
       // const playersToVisualize = await analyzeTranscriptForPlayers(generatedTranscript);

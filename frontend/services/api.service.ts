@@ -1,8 +1,10 @@
+import { Players, Transcriptions } from "@/types";
+
 const API_BASE_URL = 'http://localhost:5051';
 
 export class ApiService {
   // Upload one or more recordings (files)
-  static async uploadRecording(files: File[]): Promise<any> {
+  static async uploadRecording(files: File[]): Promise<Transcriptions> {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
 
@@ -12,7 +14,7 @@ export class ApiService {
     });
 
     if (!response.ok) {
-      throw new Error(await response.text());
+      throw new Error(await response.json());
     }
     return await response.json();
   }
@@ -68,7 +70,7 @@ export class ApiService {
   }
 
   // List all characters
-  static async listCharacters(): Promise<{ FileName: string; Url: string }[]> {
+  static async listCharacters(): Promise<string> {
     const response = await fetch(`${API_BASE_URL}/characters`, {
       method: 'POST'
     });
