@@ -219,7 +219,7 @@ app.MapPost(charactersApiSegment, async (ChatClient client, CancellationToken ca
     var jsonContent = result.Value.Content[0].Text;
     var characterSummaryFile = Path.Combine(CharactersDirectoryName, Path.ChangeExtension(transcriptFile.Name, ".json"));
     await File.WriteAllTextAsync(characterSummaryFile, jsonContent.Trim('`')[4..].Trim(), cancellationToken).ConfigureAwait(false);
-    return Results.Created();
+    return Results.File(characterSummaryFile, "application/json");
 }).WithName("CreateCharacterSummary").WithOpenApi();
 
 static string GetImageName(string recordingName, string characterName) =>
