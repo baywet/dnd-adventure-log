@@ -67,6 +67,7 @@ Directory.CreateDirectory(TranscriptionDirectoryName);
 
 const string recordingsApiSegment = "/recordings";
 
+const int maxChunkSize = 26_214_400; // 25 MB
 /// <summary>
 /// Converts an MP3 MemoryStream to a lower bitrate MP3 MemoryStream.
 /// </summary>
@@ -75,6 +76,10 @@ const string recordingsApiSegment = "/recordings";
 /// <returns>MemoryStream containing lower bitrate MP3</returns>
 static async Task<MemoryStream> ConvertMp3ToLowerBitrate(MemoryStream inputMp3Stream, CancellationToken cancellationToken)
 {
+    if (inputMp3Stream.Length <= maxChunkSize)
+    {
+        return inputMp3Stream;
+    }
     inputMp3Stream.Position = 0;
     using var mp3Reader = new Mp3FileReader(inputMp3Stream);
     using var pcmStream = WaveFormatConversionStream.CreatePcmStream(mp3Reader);
@@ -86,7 +91,6 @@ static async Task<MemoryStream> ConvertMp3ToLowerBitrate(MemoryStream inputMp3St
     return outStream;
 }
 
-const int maxChunkSize = 26_214_400; // 25 MB
 const int chunkDurationSeconds = 20 * 60; // 20 minutes
 static async Task<string> ChunkAndMergeTranscriptsIfRequired(MemoryStream originalStream, string fileName, AudioTranscriptionOptions options, AudioClient client, CancellationToken cancellationToken)
 {
@@ -98,7 +102,8 @@ static async Task<string> ChunkAndMergeTranscriptsIfRequired(MemoryStream origin
     if (totalDuration <= chunkDurationSeconds)
     {
         originalStream.Position = 0;
-        var transcription = await client.TranscribeAudioAsync(originalStream, fileName, options, cancellationToken).ConfigureAwait(false);
+        using var uploadStream = await ConvertMp3ToLowerBitrate(originalStream, cancellationToken).ConfigureAwait(false);
+        var transcription = await client.TranscribeAudioAsync(uploadStream, fileName, options, cancellationToken).ConfigureAwait(false);
         return transcription.Value.Text;
     }
 
@@ -121,8 +126,9 @@ static async Task<string> ChunkAndMergeTranscriptsIfRequired(MemoryStream origin
             await chunkStream.WriteAsync(frame.RawData.AsMemory(0, frame.RawData.Length), cancellationToken).ConfigureAwait(false);
         }
         chunkStream.Position = 0;
+        using var convertedChunkStream = await ConvertMp3ToLowerBitrate(chunkStream, cancellationToken).ConfigureAwait(false);
 
-        var transcription = await client.TranscribeAudioAsync(chunkStream, chunkFileName, options, cancellationToken).ConfigureAwait(false);
+        var transcription = await client.TranscribeAudioAsync(convertedChunkStream, chunkFileName, options, cancellationToken).ConfigureAwait(false);
         transcriptions.Add(transcription.Value.Text);
         chunkIndex++;
     }
