@@ -4,9 +4,16 @@ import { FileUpload } from "./components/FileUpload";
 import { ProcessingView } from "./components/ProcessingView";
 import { ResultsView } from "./components/ResultsView";
 import { ApiService } from "./services/api.service";
-import type { Player, Players, Transcription, Transcriptions } from "./types";
+import type {
+  Campaign,
+  Player,
+  Players,
+  Transcription,
+  Transcriptions,
+} from "./types";
 import { ProcessState } from "./types";
 import { ApiAxiomService } from "./services/api.axiom.service";
+import { CampaignList } from "./components/CampaignList";
 
 const App: React.FC = () => {
   const [processState, setProcessState] = useState<ProcessState>(
@@ -32,6 +39,10 @@ const App: React.FC = () => {
     setUploadedFiles([]);
   }, []);
 
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(
+    null
+  );
+
   const handleFilesUpload = useCallback(async (files: File[]) => {
     // Clear previous results and set processing state
     setProcessState(ProcessState.Processing);
@@ -42,46 +53,49 @@ const App: React.FC = () => {
     setUploadedFiles(files);
 
     try {
-      setLoadingMessage("Asking our scrybe to write down the legend...");
       setProcessState(ProcessState.Processing);
 
-      // 1. Upload recording
-      const transcriptResult = await ApiService.uploadRecording(files).catch((err) => {
-        console.error("Failed to upload recordings:", err);
-        setProcessState(ProcessState.Error);
-        return [];
-      });
-      setTranscript(transcriptResult.map((t) => t.transcription).join("\n") || "");
-
-      // Assume the API returns the recording name in the result, or derive it from the file name
-      // For this example, use the first file's name (adjust as needed)
-      const recordingName = files[0]?.name;
-      if (!recordingName) throw new Error("No recording name found.");
-
-      // 2. POST /characters to generate data for this recording
-      setLoadingMessage("Summoning the heroes from the legend...");
-      await ApiService.generateCharacters(recordingName);
-
-      // 3. List characters for this recording
-      setLoadingMessage("Consulting the arcane orbs to identify the heroes...");
-      const playersResult = await ApiService.listCharacters(recordingName).catch((err) => {
-        console.error("Failed to get players:", err);
-        setProcessState(ProcessState.Error);
-        return [];
-      });
-      setPlayers(playersResult);
-
-      // 4. For each player, POST character profile to generate portrait
-      setLoadingMessage("Capturing the essence of each hero onto canvas...");
-      await Promise.all(
-        playersResult.map(async (player) => {
-          try {
-            await ApiService.getPlayerPortrait(recordingName, player.name);
-          } catch (err) {
-            console.error(`Failed to generate portrait for ${player.name}:`, err);
-          }
-        })
+      // Transcribe the audio files
+      setLoadingMessage("Asking our scrybe to write down the legend...");
+      await ApiAxiomService.uploadRecording(
+        selectedCampaign?.name || "",
+        files
       );
+
+      setLoadingMessage("Consulting the arcane orbs to identify the heroes...");
+      await ApiAxiomService.generateCharacters(selectedCampaign?.name || "");
+
+      await ApiAxiomService.listCharacters(
+        selectedCampaign?.name || ""
+      ).then((chars: Players) => {
+        setPlayers(chars);
+      });
+
+     // call api axiome service to generate profile for each player
+     setLoadingMessage("Forging the heroes profiles in the fires of Mount Doom...");
+      for (const player of players) {
+        await ApiAxiomService.generateCharacterProfile(
+          selectedCampaign?.name || "",
+          player.name
+        );
+      }
+
+      await ApiAxiomService.listRecordings(
+        selectedCampaign?.name || ""
+      ).then((transcs: Transcriptions) => {
+        const fullTranscript = transcs.map((t) => t.transcription).join("\n");
+        setTranscript(fullTranscript);
+      });
+
+      setLoadingMessage("Summoning the epic moment from the ether...");
+      // for now just get the first recording and generate epic moment for it
+      if (files.length > 0) {
+        const epicMoment = await ApiAxiomService.createEpicMoment(
+          selectedCampaign?.name || "",
+          files[0].name
+        );
+        setEpicMomentVideoUrl(epicMoment?.epicMomentUrl || null);
+      }
 
       setProcessState(ProcessState.Success);
     } catch (err) {
@@ -115,9 +129,15 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-gray-900 text-gray-200">
       <Header />
       <main className="container mx-auto px-4 py-8 md:py-12">
+        <div>
+          <CampaignList onSelect={setSelectedCampaign}></CampaignList>
+        </div>
         <div className="max-w-4xl mx-auto">
-          {processState === ProcessState.Idle && (
-            <FileUpload onFilesUpload={handleFilesUpload} />
+          {processState === ProcessState.Idle && selectedCampaign != null && (
+            <FileUpload
+              campaign={selectedCampaign}
+              onFilesUpload={handleFilesUpload}
+            />
           )}
           {processState === ProcessState.Processing && (
             <ProcessingView message={loadingMessage} />

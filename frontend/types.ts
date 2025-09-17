@@ -1,3 +1,8 @@
+
+export interface Campaign {
+  name: string;
+}
+
 export interface Player {
   name: string;
   description: string;

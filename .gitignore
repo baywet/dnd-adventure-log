@@ -421,6 +421,7 @@ autom4te.cache/
 *.tar.gz
 tarballs/
 test-results/
+/frontend/.vite/deps
 
 # Mac bundle stuff
 *.dmg
@@ -486,8 +487,4 @@ $RECYCLE.BIN/
 
 # specific to the application
 
-Uploads/
-Transcriptions/
-Characters/
-/frontend/.vite/deps
-
+Campaigns/
