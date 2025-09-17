@@ -6,14 +6,18 @@ namespace api;
 public class CustomVideoClient
 {
 	private readonly string _endpoint;
-	public CustomVideoClient(string endpoint)
+	private readonly IHttpClientFactory _httpClientFactory;
+
+	public CustomVideoClient(string endpoint, IHttpClientFactory httpClientFactory)
 	{
 		ArgumentException.ThrowIfNullOrEmpty(endpoint);
+		ArgumentNullException.ThrowIfNull(httpClientFactory);
 		_endpoint = endpoint;
+		_httpClientFactory = httpClientFactory;
 	}
-	public async Task<Stream?> GetEpicMomentVideoAsync(string recounting, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
+	public async Task<Stream?> GetEpicMomentVideoAsync(string recounting, CancellationToken cancellationToken)
 	{
-		using var httpClient = httpClientFactory.CreateClient();
+		using var httpClient = _httpClientFactory.CreateClient();
 		httpClient.BaseAddress = new Uri(_endpoint);
 		var credentials = new DefaultAzureCredential();
 		var token = await credentials.GetTokenAsync(

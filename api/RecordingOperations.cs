@@ -22,12 +22,12 @@ public static class RecordingOperations
 	{
 		return Path.ChangeExtension(GetRecordingAssetPath(campaignName, recordingName, Constants.EpicMomentsDirectoryName), ".txt");
 	}
-	private static string GetRecordingAssetsRootPath(string campaignName, string assetType)
+	public static string GetRecordingAssetsRootPath(string campaignName, string assetType)
 	{
 		ArgumentException.ThrowIfNullOrEmpty(assetType);
 		return Path.Combine(CampaignOperations.GetCampaignRootPath(campaignName), assetType);
 	}
-	private static string GetRecordingAssetPath(string campaignName, string recordingName, string assetType)
+	public static string GetRecordingAssetPath(string campaignName, string recordingName, string assetType)
 	{
 		if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
 		{
@@ -143,7 +143,7 @@ public static class RecordingOperations
 				Directory.CreateDirectory(taleDirectory);
 			}
 			await File.WriteAllTextAsync(taleFile, taleContent, cancellationToken).ConfigureAwait(false);
-			using var epicMomentVideo = await customVideoClient.GetEpicMomentVideoAsync(taleContent, httpClientFactory, cancellationToken).ConfigureAwait(false);
+			using var epicMomentVideo = await customVideoClient.GetEpicMomentVideoAsync(taleContent, cancellationToken).ConfigureAwait(false);
 			if (epicMomentVideo is null)
 			{
 				return Results.StatusCode(500);
