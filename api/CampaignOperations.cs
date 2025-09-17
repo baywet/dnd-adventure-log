@@ -2,6 +2,14 @@ namespace api;
 
 public static class CampaignOperations
 {
+	public static string GetCampaignRootPath(string campaignName)
+	{
+		if (Path.IsPathRooted(campaignName) || campaignName.Contains("..", StringComparison.Ordinal))
+		{
+			throw new InvalidDataException("Name contains invalid characters.");
+		}
+		return Path.Combine(Constants.CampaignsDirectoryName, campaignName);
+	}
 	public static void AddCampaignOperations(this WebApplication app)
 	{
 		app.MapGet(Constants.CampaignsApiSegment, () =>
@@ -15,11 +23,7 @@ public static class CampaignOperations
 
 		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaignName) =>
 		{
-			if (Path.IsPathRooted(campaignName) || campaignName.Contains("..", StringComparison.Ordinal))
-			{
-				return Results.BadRequest("Name contains invalid characters.");
-			}
-			var campaignPath = Path.Combine(Constants.CampaignsDirectoryName, campaignName);
+			var campaignPath = GetCampaignRootPath(campaignName);
 			if (Directory.Exists(campaignPath))
 			{
 				return Results.Conflict("Campaign already exists.");
@@ -30,17 +34,13 @@ public static class CampaignOperations
 
 		app.MapDelete($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaignName) =>
 		{
-			if (Path.IsPathRooted(campaignName) || campaignName.Contains("..", StringComparison.Ordinal))
-			{
-				return Results.BadRequest("Name contains invalid characters.");
-			}
-			var campaignPath = Path.Combine(Constants.CampaignsDirectoryName, campaignName);
+			var campaignPath = GetCampaignRootPath(campaignName);
 			if (!Directory.Exists(campaignPath))
 			{
 				return Results.NotFound("Campaign does not exist.");
 			}
 			Directory.Delete(campaignPath, true);
 			return Results.Accepted();
-		}).WithName("CleanApp").WithOpenApi();
+		}).WithName("DeleteCampaign").WithOpenApi();
 	}
 }
