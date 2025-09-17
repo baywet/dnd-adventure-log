@@ -1,4 +1,5 @@
 using OpenAI.Audio;
+using OpenAI.Chat;
 
 namespace api;
 
@@ -6,19 +7,41 @@ public static class RecordingOperations
 {
 	public static string GetRecordingsRootPath(string campaignName)
 	{
-		return Path.Combine(CampaignOperations.GetCampaignRootPath(campaignName), Constants.RecordingsDirectoryName);
+		return GetRecordingAssetsRootPath(campaignName, Constants.RecordingsDirectoryName);
 	}
 	public static string GetTranscriptionsRootPath(string campaignName)
 	{
-		return Path.Combine(CampaignOperations.GetCampaignRootPath(campaignName), Constants.TranscriptionDirectoryName);
+		return GetRecordingAssetsRootPath(campaignName, Constants.TranscriptionDirectoryName);
 	}
-	public static string GetRecordingRootPath(string campaignName, string recordingName)
+	public static string GetEpicMomentsRootPath(string campaignName)
+	{
+		return GetRecordingAssetsRootPath(campaignName, Constants.EpicMomentsDirectoryName);
+	}
+	public static string GetEpicMomentVideoPath(string campaignName, string recordingName) => Path.ChangeExtension(GetEpicMomentTextPath(campaignName, recordingName), ".mp4");
+	public static string GetEpicMomentTextPath(string campaignName, string recordingName)
+	{
+		return Path.ChangeExtension(GetRecordingAssetPath(campaignName, recordingName, Constants.EpicMomentsDirectoryName), ".txt");
+	}
+	private static string GetRecordingAssetsRootPath(string campaignName, string assetType)
+	{
+		ArgumentException.ThrowIfNullOrEmpty(assetType);
+		return Path.Combine(CampaignOperations.GetCampaignRootPath(campaignName), assetType);
+	}
+	private static string GetRecordingAssetPath(string campaignName, string recordingName, string assetType)
 	{
 		if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
 		{
 			throw new InvalidDataException("Name contains invalid characters.");
 		}
-		return Path.Combine(GetRecordingsRootPath(campaignName), recordingName);
+		return Path.Combine(GetRecordingAssetsRootPath(campaignName, assetType), recordingName);
+	}
+	public static string GetRecordingPath(string campaignName, string recordingName)
+	{
+		return Path.ChangeExtension(GetRecordingAssetPath(campaignName, recordingName, Constants.RecordingsDirectoryName), ".mp3");
+	}
+	public static string GetTranscriptionPath(string campaignName, string recordingName)
+	{
+		return Path.ChangeExtension(GetRecordingAssetPath(campaignName, recordingName, Constants.TranscriptionDirectoryName), ".txt");
 	}
 	public static void AddRecordingOperations(this WebApplication app)
 	{
@@ -93,5 +116,53 @@ public static class RecordingOperations
 
 			return Results.Ok(files);
 		}).WithName("ListRecordings").WithOpenApi();
+
+		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", async (string campaignName, string recordingName, CustomVideoClient customVideoClient, ChatClient client, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken) =>
+		{
+			var transcriptionFile = GetTranscriptionPath(campaignName, recordingName);
+			if (!File.Exists(transcriptionFile))
+			{
+				return Results.NotFound("Transcription not found.");
+			}
+			var transcript = await File.ReadAllTextAsync(transcriptionFile, cancellationToken).ConfigureAwait(false);
+			var result = await client.CompleteChatAsync(
+			[
+				new SystemChatMessage(
+					"""
+					You are a bard following a group of dungeons and dragons heroes and tasked with collecting tales of their most epic moments during their adventures.
+					Analyze the transcript of this play session and extract a tale of an epic encounter. You might recount it as a 10 sentences story or ballad.
+					Exaggerate the details and the facts to make it more interesting and entertaining.
+					"""),
+				new UserChatMessage(transcript)
+			], cancellationToken: cancellationToken).ConfigureAwait(false);
+			var taleContent = result.Value.Content[0].Text;
+			var taleFile = GetEpicMomentTextPath(campaignName, recordingName);
+			var taleDirectory = GetEpicMomentsRootPath(campaignName);
+			if (!Directory.Exists(taleDirectory) && taleDirectory is not null)
+			{
+				Directory.CreateDirectory(taleDirectory);
+			}
+			await File.WriteAllTextAsync(taleFile, taleContent, cancellationToken).ConfigureAwait(false);
+			using var epicMomentVideo = await customVideoClient.GetEpicMomentVideoAsync(taleContent, httpClientFactory, cancellationToken).ConfigureAwait(false);
+			if (epicMomentVideo is null)
+			{
+				return Results.StatusCode(500);
+			}
+			var epicMomentVideoPath = GetEpicMomentVideoPath(campaignName, recordingName);
+			using var videoFile = File.Create(epicMomentVideoPath);
+			await epicMomentVideo.CopyToAsync(videoFile, cancellationToken).ConfigureAwait(false);
+			return Results.Created();
+		}).WithName("CreateEpicMoment").WithOpenApi();
+
+		app.MapGet($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", (string campaignName, string recordingName) =>
+		{
+			var epicMomentVideoPath = GetEpicMomentVideoPath(campaignName, recordingName);
+			if (!File.Exists(epicMomentVideoPath))
+			{
+				return Results.NotFound("Epic moment video not found.");
+			}
+			var videoStream = File.OpenRead(epicMomentVideoPath);
+			return Results.File(videoStream, "video/mp4", Path.GetFileName(epicMomentVideoPath));
+		}).WithName("GetEpicMoment").WithOpenApi();
 	}
 }

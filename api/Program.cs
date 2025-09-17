@@ -38,6 +38,9 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHold
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
                                         .GetService(Constants.EastUS2Region)
                                         .GetImageClient("gpt-image-1"));
+builder.Services.AddSingleton(sp => new CustomVideoClient(
+    builder.Configuration[$"AzureOpenAI:{Constants.EastUS2Region}"] ??
+    throw new InvalidOperationException($"Please set the AzureOpenAI:{Constants.EastUS2Region} configuration value.")));
 builder.Services.AddHttpClient();
 
 var app = builder.Build();
@@ -208,122 +211,5 @@ app.MapGet($"{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.Charac
     var imageStream = File.OpenRead(imagePath);
     return Results.File(imageStream, "image/png");
 }).WithName("GetCharacterProfilePicture").WithOpenApi();
-
-static string GetEpicMomentTextFileName(string recordingName) =>
-    $"{recordingName}-epic-moment.txt";
-static string GetEpicMomentVideoFileName(string recordingName) =>
-    Path.ChangeExtension(GetEpicMomentTextFileName(recordingName), ".mp4");
-
-async Task<Stream?> GetEpicMomentVideoAsync(string recounting, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
-{
-    using var httpClient = httpClientFactory.CreateClient();
-    httpClient.BaseAddress = new Uri(builder.Configuration[$"AzureOpenAI:EastUS2"] ??
-                throw new InvalidOperationException($"Please set the AzureOpenAI:EastUS2 configuration value."));
-    var credentials = new DefaultAzureCredential();
-    var token = await credentials.GetTokenAsync(
-        new Azure.Core.TokenRequestContext(new[] { "https://cognitiveservices.azure.com/.default" }),
-        cancellationToken).ConfigureAwait(false);
-    httpClient.DefaultRequestHeaders.Authorization = new("Bearer", token.Token);
-    using var response = await httpClient.PostAsJsonAsync("/openai/v1/video/generations/jobs?api-version=preview",
-        new
-        {
-            model = "sora",
-            prompt = recounting,
-            width = 1920,
-            height = 1080,
-            n_seconds = 15,
-            format = "mp4"
-        }, cancellationToken).ConfigureAwait(false);
-    if (!response.IsSuccessStatusCode)
-    {
-        var errorContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        throw new InvalidOperationException($"Video generation request failed with status code {response.StatusCode}: {errorContent}");
-    }
-    var responseJson = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: cancellationToken).ConfigureAwait(false);
-    var taskId = responseJson?["id"]?.ToString();
-    return await PollForVideoGenerationStatus(httpClient, taskId ?? throw new InvalidOperationException("Task ID is missing."), cancellationToken).ConfigureAwait(false);
-}
-async static Task<Stream?> PollForVideoGenerationStatus(HttpClient client, string taskId, CancellationToken cancellationToken)
-{
-    var response = await client.GetAsync($"/openai/v1/video/generations/jobs/{taskId}?api-version=preview", cancellationToken).ConfigureAwait(false);
-    if (!response.IsSuccessStatusCode)
-    {
-        var errorContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        throw new InvalidOperationException($"Video generation status request failed with status code {response.StatusCode}: {errorContent}");
-    }
-    var responseJson = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: cancellationToken).ConfigureAwait(false);
-    var status = responseJson?["status"]?.ToString();
-    if (string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase))
-    {
-        var videoId = responseJson?["generations"]?[0]?["id"]?.ToString();
-        if (string.IsNullOrEmpty(videoId))
-        {
-            throw new InvalidOperationException("Video ID is missing.");
-        }
-        var videoResponse = await client.GetAsync($"/openai/v1/video/generations/{videoId}/content/video?api-version=preview", cancellationToken).ConfigureAwait(false);
-        videoResponse.EnsureSuccessStatusCode();
-        return await videoResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-    }
-    else if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase))
-    {
-        throw new InvalidOperationException("Video generation failed.");
-    }
-    else
-    {
-        await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
-        return await PollForVideoGenerationStatus(client, taskId, cancellationToken).ConfigureAwait(false);
-    }
-}
-
-app.MapPost($"{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", async (string recordingName, ChatClient client, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken) =>
-{
-    if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
-    {
-        return Results.BadRequest("Invalid path.");
-    }
-    var transcriptFile = Path.Combine(Constants.TranscriptionDirectoryName, $"{recordingName}.txt");
-    if (!File.Exists(transcriptFile))
-    {
-        return Results.NotFound("Transcription not found.");
-    }
-    var transcript = await File.ReadAllTextAsync(transcriptFile, cancellationToken).ConfigureAwait(false);
-    var result = await client.CompleteChatAsync(
-    [
-        new SystemChatMessage(
-            """
-            You are a bard following a group of dungeons and dragons heros and tasked with collecting tales of their most epic moments during their adventures.
-            Analyze the transcript of this play session and extract a tale of an epic encounter. You might recount it as a 10 sentences story or ballad.
-            Exaggerate the details and the facts to make it more interesting and entertaining.
-            """),
-        new UserChatMessage(transcript)
-    ], cancellationToken: cancellationToken).ConfigureAwait(false);
-    var taleContent = result.Value.Content[0].Text;
-    var taleFile = Path.Combine(Constants.TranscriptionDirectoryName, GetEpicMomentTextFileName(recordingName));
-    await File.WriteAllTextAsync(taleFile, taleContent, cancellationToken).ConfigureAwait(false);
-    using var epicMomentVideo = await GetEpicMomentVideoAsync(taleContent, httpClientFactory, cancellationToken).ConfigureAwait(false);
-    if (epicMomentVideo is null)
-    {
-        return Results.StatusCode(500);
-    }
-    var epicMomentVideoPath = GetEpicMomentVideoFileName(recordingName);
-    using var videoFile = File.Create(epicMomentVideoPath);
-    await epicMomentVideo.CopyToAsync(videoFile, cancellationToken).ConfigureAwait(false);
-    return Results.Created();
-}).WithName("CreateEpicMoment").WithOpenApi();
-
-app.MapGet($"{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", (string recordingName) =>
-{
-    if (Path.IsPathRooted(recordingName) || recordingName.Contains("..", StringComparison.Ordinal))
-    {
-        return Results.BadRequest("Invalid path.");
-    }
-    var epicMomentVideoPath = GetEpicMomentVideoFileName(recordingName);
-    if (!File.Exists(epicMomentVideoPath))
-    {
-        return Results.NotFound("Epic moment video not found.");
-    }
-    var videoStream = File.OpenRead(epicMomentVideoPath);
-    return Results.File(videoStream, "video/mp4", Path.GetFileName(epicMomentVideoPath));
-}).WithName("GetEpicMoment").WithOpenApi();
 
 await app.RunAsync();

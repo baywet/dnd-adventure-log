@@ -7,6 +7,7 @@ public static class Constants
 	public const string ApiDocsPath = "api-docs";
 	public const string RecordingsDirectoryName = "Recordings";
 	public const string TranscriptionDirectoryName = "Transcriptions";
+	public const string EpicMomentsDirectoryName = "EpicMoments";
 	public const string RecordingsApiSegment = "/recordings";
 	public const string CharactersDirectoryName = "Characters";
 	public const string CharactersApiSegment = "/characters";
