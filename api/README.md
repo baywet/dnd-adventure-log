@@ -29,5 +29,5 @@ The API is implemented through multiple files:
 - CampaignStorageService.cs handles all the storage operations and retrieval. This uses local storage for simplicity.
 - CampaignAnalysisService.cs handles all the calls to Azure AI Foundry.
 - CustomVideoClient.cs handcrafted client for video generation.
-- *Helper.cs basic helpers to configure OpenAPI description emission and Audio chunking.
+- AudioHelper.cs basic helpers Audio chunking.
 - appsettings.Development.json: needs to be updated with your service endpoint.
