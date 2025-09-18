@@ -4,7 +4,7 @@ public static class CharactersOperations
 {
 	public static void AddCharacterOperations(this WebApplication app)
 	{
-		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}", async (string campaignName, CampaignAnalysisService analysisService, CancellationToken cancellationToken) =>
+		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}", async (string campaignName, IAnalysisService analysisService, CancellationToken cancellationToken) =>
 		{
 			try
 			{
@@ -31,7 +31,7 @@ public static class CharactersOperations
 			return Results.File(fs, "application/json");
 		}).WithName("GetCharacters").WithOpenApi().Produces<Character[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType).Produces(StatusCodes.Status404NotFound);
 
-		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}/profile/{{characterName}}", async (string campaignName, string characterName, CampaignAnalysisService analysisService, CancellationToken cancellationToken) =>
+		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}/profile/{{characterName}}", async (string campaignName, string characterName, IAnalysisService analysisService, CancellationToken cancellationToken) =>
 		{
 			try
 			{

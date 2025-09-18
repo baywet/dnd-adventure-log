@@ -10,7 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSingleton<DefaultAzureCredential>();
+builder.Services.AddSingleton<TokenCredential, DefaultAzureCredential>();
 // builder.Services.AddSingleton(new ApiKeyCredential(builder.Configuration["AzureOpenAIKey"] 
 //              ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
 builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
@@ -71,6 +71,8 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<CampaignStorageService>();
 
 builder.Services.AddSingleton<CampaignAnalysisService>();
+
+builder.Services.AddSingleton<IAnalysisService, CachedAnalysisService>();
 
 var app = builder.Build();
 

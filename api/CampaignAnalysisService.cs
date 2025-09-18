@@ -1,13 +1,12 @@
 using System.ClientModel;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using OpenAI.Audio;
 using OpenAI.Chat;
 using OpenAI.Images;
 
 namespace api;
 
-public class CampaignAnalysisService
+public class CampaignAnalysisService : IAnalysisService
 {
 	public CampaignAnalysisService(CampaignStorageService storageService, CustomVideoClient customVideoClient, ChatClient chatClient, AudioClient audioClient, IHttpClientFactory httpClientFactory, ImageClient imageClient)
 	{

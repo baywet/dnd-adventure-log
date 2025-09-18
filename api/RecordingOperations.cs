@@ -4,7 +4,7 @@ public static class RecordingOperations
 {
 	public static void AddRecordingOperations(this WebApplication app)
 	{
-		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}", async (HttpRequest request, string campaignName, CampaignAnalysisService analysisService, CancellationToken cancellationToken) =>
+		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}", async (HttpRequest request, string campaignName, IAnalysisService analysisService, CancellationToken cancellationToken) =>
 		{
 			// Set max request body size to 1 GB for this endpoint
 			var maxRequestBodySizeFeature = request.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
@@ -37,7 +37,7 @@ public static class RecordingOperations
 			return Results.Ok(files);
 		}).WithName("ListRecordings").WithOpenApi().Produces<string[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType);
 
-		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", async (string campaignName, string recordingName, CampaignAnalysisService analysisService, CancellationToken cancellationToken) =>
+		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", async (string campaignName, string recordingName, IAnalysisService analysisService, CancellationToken cancellationToken) =>
 		{
 			try
 			{
