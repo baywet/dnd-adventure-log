@@ -27,7 +27,6 @@ builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
     return new(new(StringComparer.OrdinalIgnoreCase)
     {
         { Constants.EastUS2Region, createClient(Constants.EastUS2Region) },
-        { Constants.EastUSRegion, createClient(Constants.EastUSRegion) },
     });
 });
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
