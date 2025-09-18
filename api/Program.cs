@@ -1,6 +1,8 @@
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using api;
+using System.ClientModel;
+using Azure.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,12 +10,18 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSingleton<AzureNamedServicesHolder>(_ =>
+builder.Services.AddSingleton<DefaultAzureCredential>();
+builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
 {
-    AzureOpenAIClient createClient(string region) => new(
-        new Uri(builder.Configuration[$"AzureOpenAI:{region}"] ??
-                throw new InvalidOperationException($"Please set the AzureOpenAI:{region} configuration value.")),
-        new DefaultAzureCredential());
+    AzureOpenAIClient createClientWithUri(Uri uri) =>
+        sp.GetService<ApiKeyCredential>() is { } apiKeyCredential ?
+            new(uri, apiKeyCredential) :
+            new(uri, sp.GetRequiredService<TokenCredential>());
+
+    AzureOpenAIClient createClient(string region) =>
+        createClientWithUri(new Uri(builder.Configuration[$"AzureOpenAI:{region}"] ??
+            throw new InvalidOperationException($"Please set the AzureOpenAI:{region} configuration value.")));
+
     return new(new(StringComparer.OrdinalIgnoreCase)
     {
         { Constants.EastUS2Region, createClient(Constants.EastUS2Region) },
