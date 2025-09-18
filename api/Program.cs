@@ -10,13 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll",
-        builder => builder.AllowAnyOrigin()
-                           .AllowAnyMethod()
-                           .AllowAnyHeader());
-});
+// builder.Services.AddSingleton<DefaultAzureCredential>();
 builder.Services.AddSingleton(new ApiKeyCredential(builder.Configuration["AzureOpenAIKey"] 
              ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
 builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
@@ -35,6 +29,13 @@ builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
         { Constants.EastUS2Region, createClient(Constants.EastUS2Region) },
         { Constants.EastUSRegion, createClient(Constants.EastUSRegion) },
     });
+});
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll",
+        builder => builder.AllowAnyOrigin()
+                           .AllowAnyMethod()
+                           .AllowAnyHeader());
 });
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
                                         .GetService(Constants.EastUS2Region)
