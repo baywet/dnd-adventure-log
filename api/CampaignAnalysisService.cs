@@ -74,22 +74,10 @@ public class CampaignAnalysisService
 	public async Task GenerateCharacterProfilePictureAsync(string campaignName, string characterName, CancellationToken cancellationToken)
 	{
 		using var fs = _storageService.GetCharacterSummary(campaignName) ?? throw new FileNotFoundException("Characters summary not found.");
-		var characterJson = await JsonNode.ParseAsync(fs, cancellationToken: cancellationToken).ConfigureAwait(false);
-		if (characterJson is not JsonArray characters)
-		{
-			throw new InvalidOperationException("Invalid character summary format.");
-		}
-		var character = characters.FirstOrDefault(c =>
-			c is JsonObject obj &&
-			obj.TryGetPropertyValue("name", out var nameNode) &&
-			nameNode is JsonValue jsonValue &&
-			jsonValue.GetValueKind() is JsonValueKind.String &&
-			jsonValue.GetValue<string>().Equals(characterName, StringComparison.OrdinalIgnoreCase));
-		if (character is null)
-		{
-			throw new FileNotFoundException("Character not found.");
-		}
-		var characterDescription = character["description"]?.ToString() ?? string.Empty;
+		var characters = await JsonSerializer.DeserializeAsync<List<Character>>(fs, cancellationToken: cancellationToken).ConfigureAwait(false)
+			?? throw new InvalidOperationException("Invalid character summary format.");
+		var character = characters.FirstOrDefault(c => characterName.Equals(c.name, StringComparison.OrdinalIgnoreCase)) ?? throw new FileNotFoundException("Character not found.");
+		var characterDescription = character.description ?? string.Empty;
 		if (string.IsNullOrEmpty(characterDescription))
 		{
 			throw new FileNotFoundException("Character description is empty.");
