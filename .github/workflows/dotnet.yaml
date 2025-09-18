@@ -1,0 +1,29 @@
+name: Validate .NET projects
+
+on:
+  push:
+  pull_request:
+  merge_group: 
+  workflow_dispatch:
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.x
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+    #   - name: Test
+    #     run: dotnet test --no-build --configuration Release --verbosity normal
