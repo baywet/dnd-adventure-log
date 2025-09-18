@@ -41,7 +41,8 @@ public static class RecordingOperations
 		{
 			try
 			{
-				await analysisService.GenerateEpicMomentVideoAsync(campaignName, recordingName, cancellationToken);
+				var result = await analysisService.GenerateEpicMomentVideoAsync(campaignName, recordingName, cancellationToken);
+				return Results.Stream(result, "video/mp4");
 			}
 			catch (FileNotFoundException ex)
 			{
@@ -51,9 +52,8 @@ public static class RecordingOperations
 			{
 				return Results.InternalServerError(ex.Message);
 			}
-			
-			return Results.Created();
-		}).WithName("CreateEpicMoment").WithOpenApi().Produces(StatusCodes.Status201Created).ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status500InternalServerError);
+
+		}).WithName("CreateEpicMoment").WithOpenApi().Produces<Stream>(contentType: "video/mp4").ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status500InternalServerError);
 
 		app.MapGet($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", (string campaignName, string recordingName, CampaignStorageService storageService) =>
 		{

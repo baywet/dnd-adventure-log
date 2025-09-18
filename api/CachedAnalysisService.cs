@@ -26,22 +26,22 @@ public class CachedAnalysisService : IAnalysisService
 		return resultJson;
 	}
 
-	public Task GenerateCharacterProfilePictureAsync(string campaignName, string characterName, CancellationToken cancellationToken)
+	public Task<Stream> GenerateCharacterProfilePictureAsync(string campaignName, string characterName, CancellationToken cancellationToken)
 	{
-		using var existingImage = _storageService.GetCharacterProfilePicture(campaignName, characterName);
+		var existingImage = _storageService.GetCharacterProfilePicture(campaignName, characterName);
 		if (existingImage is not null)
 		{
-			return Task.CompletedTask;
+			return Task.FromResult(existingImage);
 		}
 		return _concreteService.GenerateCharacterProfilePictureAsync(campaignName, characterName, cancellationToken);
 	}
 
-	public Task GenerateEpicMomentVideoAsync(string campaignName, string recordingName, CancellationToken cancellationToken)
+	public Task<Stream> GenerateEpicMomentVideoAsync(string campaignName, string recordingName, CancellationToken cancellationToken)
 	{
-		using var existingVideo = _storageService.GetEpicMomentVideo(campaignName, recordingName);
+		var existingVideo = _storageService.GetEpicMomentVideo(campaignName, recordingName);
 		if (existingVideo is not null)
 		{
-			return Task.CompletedTask;
+			return Task.FromResult(existingVideo);
 		}
 		return _concreteService.GenerateEpicMomentVideoAsync(campaignName, recordingName, cancellationToken);
 	}

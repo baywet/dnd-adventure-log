@@ -35,8 +35,8 @@ public static class CharactersOperations
 		{
 			try
 			{
-				await analysisService.GenerateCharacterProfilePictureAsync(campaignName, characterName, cancellationToken).ConfigureAwait(false);
-				return Results.Created($"{Constants.CampaignsApiSegment}/{campaignName}{Constants.CharactersApiSegment}/profile/{characterName}", null);
+				var result = await analysisService.GenerateCharacterProfilePictureAsync(campaignName, characterName, cancellationToken).ConfigureAwait(false);
+				return Results.Stream(result, "image/png");
 			}
 			catch (FileNotFoundException ex)
 			{
@@ -46,7 +46,7 @@ public static class CharactersOperations
 			{
 				return Results.InternalServerError(ex.Message);
 			}
-		}).WithName("CreateCharacterProfilePicture").WithOpenApi().Produces(StatusCodes.Status201Created).ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status500InternalServerError);
+		}).WithName("CreateCharacterProfilePicture").WithOpenApi().Produces<Stream>(contentType: "image/png").ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status500InternalServerError);
 
 		app.MapGet($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}/profile/{{characterName}}", (string campaignName, string characterName, CampaignStorageService storageService) =>
 		{
