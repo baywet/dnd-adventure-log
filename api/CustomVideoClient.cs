@@ -93,9 +93,12 @@ public class CustomVideoClient
 			{
 				throw new InvalidOperationException("Video ID is missing.");
 			}
-			var videoResponse = await client.GetAsync($"/openai/v1/video/generations/{videoId}/content/video?api-version=preview", cancellationToken).ConfigureAwait(false);
+			using var videoResponse = await client.GetAsync($"/openai/v1/video/generations/{videoId}/content/video?api-version=preview", cancellationToken).ConfigureAwait(false);
 			videoResponse.EnsureSuccessStatusCode();
-			return await videoResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+			var ms = new MemoryStream();
+			await videoResponse.Content.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+			ms.Position = 0;
+			return ms;
 		}
 		else if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase))
 		{

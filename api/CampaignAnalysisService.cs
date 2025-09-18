@@ -1,13 +1,12 @@
 using System.ClientModel;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using OpenAI.Audio;
 using OpenAI.Chat;
 using OpenAI.Images;
 
 namespace api;
 
-public class CampaignAnalysisService
+public class CampaignAnalysisService : IAnalysisService
 {
 	public CampaignAnalysisService(CampaignStorageService storageService, CustomVideoClient customVideoClient, ChatClient chatClient, AudioClient audioClient, IHttpClientFactory httpClientFactory, ImageClient imageClient)
 	{
@@ -71,7 +70,7 @@ public class CampaignAnalysisService
 		return cleanedUpContent;
 	}
 
-	public async Task GenerateCharacterProfilePictureAsync(string campaignName, string characterName, CancellationToken cancellationToken)
+	public async Task<Stream> GenerateCharacterProfilePictureAsync(string campaignName, string characterName, CancellationToken cancellationToken)
 	{
 		using var fs = _storageService.GetCharacterSummary(campaignName) ?? throw new FileNotFoundException("Characters summary not found.");
 		var characters = await JsonSerializer.DeserializeAsync<List<Character>>(fs, cancellationToken: cancellationToken).ConfigureAwait(false)
@@ -90,8 +89,10 @@ public class CampaignAnalysisService
 			"""
 		, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-		using var stream = await GetImageStreamFromResult(result, cancellationToken).ConfigureAwait(false);
+		var stream = await GetImageStreamFromResult(result, cancellationToken).ConfigureAwait(false);
 		await _storageService.SaveCharacterProfilePictureAsync(campaignName, characterName, stream, cancellationToken).ConfigureAwait(false);
+		stream.Position = 0;
+		return stream;
 	}
 
 	private async Task<Stream> GetImageStreamFromResult(ClientResult<GeneratedImage> result, CancellationToken cancellationToken)
@@ -123,7 +124,7 @@ public class CampaignAnalysisService
 		return ms;
 	}
 
-	public async Task GenerateEpicMomentVideoAsync(string campaignName, string recordingName, CancellationToken cancellationToken)
+	public async Task<Stream> GenerateEpicMomentVideoAsync(string campaignName, string recordingName, CancellationToken cancellationToken)
 	{
 		var transcription = await _storageService.GetTranscriptionAsync(campaignName, recordingName, cancellationToken);
 		if (string.IsNullOrEmpty(transcription))
@@ -142,9 +143,11 @@ public class CampaignAnalysisService
 		], cancellationToken: cancellationToken).ConfigureAwait(false);
 		var taleContent = result.Value.Content[0].Text;
 		await _storageService.SaveEpicMomentTaleAsync(campaignName, recordingName, taleContent, cancellationToken).ConfigureAwait(false);
-		using var epicMomentVideo = await _customVideoClient.GetEpicMomentVideoAsync(taleContent, cancellationToken).ConfigureAwait(false)
-									?? throw new InvalidOperationException("Failed to generate epic moment video.");
+		var epicMomentVideo = await _customVideoClient.GetEpicMomentVideoAsync(taleContent, cancellationToken).ConfigureAwait(false)
+			?? throw new InvalidOperationException("Failed to generate epic moment video.");
 		await _storageService.SaveEpicMomentVideoAsync(campaignName, recordingName, epicMomentVideo, cancellationToken).ConfigureAwait(false);
+		epicMomentVideo.Position = 0;
+		return epicMomentVideo;
 	}
 
 	public async Task<string[]> SaveRecordingsAndGenerateTranscriptionsAsync(string campaignName, IFormFileCollection form, CancellationToken cancellationToken)
