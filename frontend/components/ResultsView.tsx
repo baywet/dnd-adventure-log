@@ -10,11 +10,11 @@ interface ResultsViewProps {
   onDeleteFile: (index: number) => void;
   transcript: string;
   players: Player[];
-  epicMomentVideoUrl: string | null;
+  epicMomentVideoUrls: string[];
   onReset: () => void;
 }
 
-export const ResultsView: React.FC<ResultsViewProps> = ({ files, onDeleteFile, transcript, players, epicMomentVideoUrl, onReset }) => {
+export const ResultsView: React.FC<ResultsViewProps> = ({ campaign, files, onDeleteFile, transcript, players, epicMomentVideoUrls, onReset }) => {
   return (
     <div className="space-y-12">
       
@@ -23,29 +23,29 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ files, onDeleteFile, t
         <h2 className="text-4xl font-title text-center text-yellow-400 mb-8">The Heroes of the Quest</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {players.map((player) => (
-            <PlayerPortrait key={player.name} player={player} />
+            <PlayerPortrait campaign={campaign} key={player.name} player={player} />
           ))}
         </div>
       </section>
 
       {/* Epic Moment */}
-      {epicMomentVideoUrl && (
+      {epicMomentVideoUrls && (
         <section>
           <h2 className="text-4xl font-title text-center text-yellow-400 mb-8">The Epic Climax</h2>
-          <EpicMomentVideo videoUrl={epicMomentVideoUrl} />
+          <EpicMomentVideo videoUrl={epicMomentVideoUrls} />
         </section>
       )}
 
-      {/* Transcript */}
+      {/* Transcript
       <section>
         <h2 className="text-4xl font-title text-center text-yellow-400 mb-8">The Chronicled Tale</h2>
         <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 max-h-96 overflow-y-auto">
           <p className="whitespace-pre-wrap leading-relaxed text-gray-300">{transcript}</p>
         </div>
-      </section>
+      </section> */}
       
        {/* Uploaded Files */}
-      <UploadedFiles files={files} onDelete={onDeleteFile} />
+      {/* <UploadedFiles files={files} onDelete={onDeleteFile} /> */}
 
       {/* Reset Button */}
       <div className="text-center pt-8">

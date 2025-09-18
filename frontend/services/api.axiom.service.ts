@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5051';
+export const API_BASE_URL = 'http://localhost:5051';
 
 export class ApiAxiomService {
   // --- Campaigns ---
@@ -38,7 +38,7 @@ export class ApiAxiomService {
 
   static async createEpicMoment(campaignName: string, recordingName: string, data?: any): Promise<any> {
     const response = await axios.post(
-      `${API_BASE_URL}/campaigns/${encodeURIComponent(campaignName)}/recordings/${encodeURIComponent(recordingName)}/epic-moments`,
+      `${API_BASE_URL}/campaigns/${encodeURIComponent(campaignName)}/recordings/${encodeURIComponent(recordingName)}/epic-moment`,
       data
     );
     return response.data;
@@ -46,7 +46,7 @@ export class ApiAxiomService {
 
   static async getEpicMoment(campaignName: string, recordingName: string): Promise<any> {
     const response = await axios.get(
-      `${API_BASE_URL}/campaigns/${encodeURIComponent(campaignName)}/recordings/${encodeURIComponent(recordingName)}/epic-moments`
+      `${API_BASE_URL}/campaigns/${encodeURIComponent(campaignName)}/recordings/${encodeURIComponent(recordingName)}/epic-moment`
     );
     return response.data;
   }

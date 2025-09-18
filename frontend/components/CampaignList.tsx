@@ -2,12 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { ApiAxiomService } from '../services/api.axiom.service';
 import { Campaign } from '@/types';
 
-
-
 interface CampaignListProps {
   onSelect?: (campaign: Campaign | null) => void;
 }
-
 
 export const CampaignList: React.FC<CampaignListProps> = ({ onSelect }) => {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);

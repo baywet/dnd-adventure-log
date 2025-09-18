@@ -80,9 +80,9 @@ export class ApiService {
     return await response.json();
   }
 
-    static async getPlayerPortrait(recordingName: string, characterName: string): Promise<string> {
+    static async getPlayerPortrait(campaignName : string, characterName: string): Promise<string> {
     const response = await fetch(
-      `${API_BASE_URL}/recordings/${encodeURIComponent(recordingName)}/characters/profile/${encodeURIComponent(characterName)}`,
+      `${API_BASE_URL}/recordings/${encodeURIComponent(campaignName)}/characters/profile/${encodeURIComponent(characterName)}`,
       { method: 'POST' }
     );
     if (!response.ok) {

@@ -3,8 +3,6 @@ using Azure.Identity;
 using api;
 using System.ClientModel;
 
-const string ApiKey = "5sQdBnDsK2JMIGAcGoZ34Gdwo8cRlThNORmOc5t0jkTmSPPPijm4JQQJ99BIACHYHv6XJ3w3AAAAACOGAmSG";
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -23,7 +21,8 @@ builder.Services.AddSingleton<AzureNamedServicesHolder>(_ =>
     AzureOpenAIClient createClient(string region) => new(
         new Uri(builder.Configuration[$"AzureOpenAI:{region}"] ??
                 throw new InvalidOperationException($"Please set the AzureOpenAI:{region} configuration value.")),
-        new ApiKeyCredential(ApiKey));
+        new ApiKeyCredential(builder.Configuration["AzureOpenAIKey"] 
+             ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
     return new(new(StringComparer.OrdinalIgnoreCase)
     {
         { Constants.EastUS2Region, createClient(Constants.EastUS2Region) },
