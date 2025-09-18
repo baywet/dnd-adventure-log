@@ -21,11 +21,15 @@ builder.Services.AddSingleton(new ApiKeyCredential(builder.Configuration["AzureO
              ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
 builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
 {
-    AzureOpenAIClient createClient(string region) => new(
-        new Uri(builder.Configuration[$"AzureOpenAI:{region}"] ??
-                throw new InvalidOperationException($"Please set the AzureOpenAI:{region} configuration value.")),
-            sp.GetRequiredService<ApiKeyCredential>()
-        );
+    AzureOpenAIClient createClientWithUri(Uri uri) =>
+        sp.GetService<ApiKeyCredential>() is { } apiKeyCredential ?
+            new(uri, apiKeyCredential) :
+            new(uri, sp.GetRequiredService<TokenCredential>());
+
+    AzureOpenAIClient createClient(string region) =>
+        createClientWithUri(new Uri(builder.Configuration[$"AzureOpenAI:{region}"] ??
+            throw new InvalidOperationException($"Please set the AzureOpenAI:{region} configuration value.")));
+
     return new(new(StringComparer.OrdinalIgnoreCase)
     {
         { Constants.EastUS2Region, createClient(Constants.EastUS2Region) },
