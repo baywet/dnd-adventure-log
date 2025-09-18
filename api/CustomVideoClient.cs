@@ -40,6 +40,7 @@ public class CustomVideoClient
 		if (!string.IsNullOrEmpty(apiKey))
 		{
 			client.DefaultRequestHeaders.Add("api-key", apiKey);
+			return;
 		}
 		if (_tokenCredentials != null)
 		{
@@ -47,6 +48,7 @@ public class CustomVideoClient
 				new TokenRequestContext(new[] { "https://cognitiveservices.azure.com/.default" }),
 				CancellationToken.None).ConfigureAwait(false);
 			client.DefaultRequestHeaders.Authorization = new("Bearer", token.Token);
+			return;
 		}
 		throw new InvalidOperationException("No valid authentication method configured.");
 	}
