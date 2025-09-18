@@ -14,4 +14,6 @@ public static class Constants
 	public const string EpicMomentsApiSegment = "/epic-moment";
 	public const string CampaignsDirectoryName = "Campaigns";
 	public const string CampaignsApiSegment = "/campaigns";
+
+	public const string ApplicationJsonMimeType = "application/json";
 }
