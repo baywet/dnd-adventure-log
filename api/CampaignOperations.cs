@@ -9,7 +9,7 @@ public static class CampaignOperations
 			var campaignNames = storageService.ListCampaigns();
 
 			return Results.Ok(campaignNames);
-		}).WithName("ListCampaigns").WithOpenApi();
+		}).WithName("ListCampaigns").WithOpenApi().Produces<string[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType);
 
 		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaignName, CampaignStorageService storageService) =>
 		{
@@ -23,7 +23,7 @@ public static class CampaignOperations
 				return Results.Conflict("Campaign already exists.");
 			}
 			return Results.Created($"{Constants.CampaignsApiSegment}/{campaignName}", null);
-		}).WithName("CreateCampaign").WithOpenApi();
+		}).WithName("CreateCampaign").WithOpenApi().Produces(StatusCodes.Status201Created).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status409Conflict);
 
 		app.MapDelete($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaignName, CampaignStorageService storageService) =>
 		{
@@ -33,6 +33,6 @@ public static class CampaignOperations
 				return Results.NotFound("Campaign does not exist.");
 			}
 			return Results.Accepted();
-		}).WithName("DeleteCampaign").WithOpenApi();
+		}).WithName("DeleteCampaign").WithOpenApi().Produces(StatusCodes.Status202Accepted).ProducesProblem(StatusCodes.Status404NotFound);
 	}
 }
