@@ -2,44 +2,36 @@ namespace api;
 
 public static class CampaignOperations
 {
-	public static string GetCampaignRootPath(string campaignName)
-	{
-		if (Path.IsPathRooted(campaignName) || campaignName.Contains("..", StringComparison.Ordinal))
-		{
-			throw new InvalidDataException("Name contains invalid characters.");
-		}
-		return Path.Combine(Constants.CampaignsDirectoryName, campaignName);
-	}
 	public static void AddCampaignOperations(this WebApplication app)
 	{
-		app.MapGet(Constants.CampaignsApiSegment, () =>
+		app.MapGet(Constants.CampaignsApiSegment, (CampaignStorageService storageService) =>
 		{
-			var campaignNames = Directory.GetDirectories(Constants.CampaignsDirectoryName)
-				.Select(filePath => Path.GetFileName(filePath))
-				.ToArray();
+			var campaignNames = storageService.ListCampaigns();
 
 			return Results.Ok(campaignNames);
 		}).WithName("ListCampaigns").WithOpenApi();
 
-		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaignName) =>
+		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaignName, CampaignStorageService storageService) =>
 		{
-			var campaignPath = GetCampaignRootPath(campaignName);
-			if (Directory.Exists(campaignPath))
+			if (string.IsNullOrWhiteSpace(campaignName))
+			{
+				return Results.BadRequest("Campaign name cannot be empty.");
+			}
+			var created = storageService.CreateCampaign(campaignName);
+			if (!created)
 			{
 				return Results.Conflict("Campaign already exists.");
 			}
-			Directory.CreateDirectory(campaignPath);
 			return Results.Created($"{Constants.CampaignsApiSegment}/{campaignName}", null);
 		}).WithName("CreateCampaign").WithOpenApi();
 
-		app.MapDelete($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaignName) =>
+		app.MapDelete($"{Constants.CampaignsApiSegment}/{{campaignName}}", (string campaignName, CampaignStorageService storageService) =>
 		{
-			var campaignPath = GetCampaignRootPath(campaignName);
-			if (!Directory.Exists(campaignPath))
+			var deleted = storageService.DeleteCampaign(campaignName);
+			if (!deleted)
 			{
 				return Results.NotFound("Campaign does not exist.");
 			}
-			Directory.Delete(campaignPath, true);
 			return Results.Accepted();
 		}).WithName("DeleteCampaign").WithOpenApi();
 	}
