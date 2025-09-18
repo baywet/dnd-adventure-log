@@ -8,35 +8,15 @@ namespace api;
 
 public static class CharactersOperations
 {
-	public static string GetCharactersRootPath(string campaignName) =>
-		RecordingOperations.GetRecordingAssetsRootPath(campaignName, Constants.CharactersDirectoryName);
-	public static string GetCharacterConfigFilePath(string campaignName) =>
-		Path.Combine(GetCharactersRootPath(campaignName), "list.json");
-	public static string GetCharacterProfilePicturePath(string campaignName, string characterName)
-	{
-		if (Path.IsPathRooted(characterName) || characterName.Contains("..", StringComparison.Ordinal))
-		{
-			throw new InvalidDataException("Name contains invalid characters.");
-		}
-
-		return Path.Combine(GetCharactersRootPath(campaignName), $"{characterName}.png");
-	}
 	public static void AddCharacterOperations(this WebApplication app)
 	{
-		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}", async (string campaignName, ChatClient client, CancellationToken cancellationToken) =>
+		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}", async (string campaignName, CampaignStorageService storageService, ChatClient client, CancellationToken cancellationToken) =>
 		{
-			// get the first episode transcript file by oldest creation date first
-			var transcriptFile = new DirectoryInfo(RecordingOperations.GetTranscriptionsRootPath(campaignName))
-				.GetFiles("*.txt")
-				.OrderBy(static f => f.CreationTime)
-				.FirstOrDefault();
-
-			if (string.IsNullOrEmpty(transcriptFile?.FullName) || !File.Exists(transcriptFile.FullName))
+			var transcript = await storageService.GetCampaignTranscriptionForCharactersAsync(campaignName, cancellationToken).ConfigureAwait(false);
+			if (string.IsNullOrEmpty(transcript))
 			{
-				return Results.NotFound("No transcription files found.");
+				return Results.BadRequest("No transcript found for this campaign.");
 			}
-			var transcript = await File.ReadAllTextAsync(transcriptFile.FullName, cancellationToken).ConfigureAwait(false);
-
 			var result = await client.CompleteChatAsync(
 			[
 				new SystemChatMessage(
@@ -64,36 +44,28 @@ public static class CharactersOperations
 				new UserChatMessage(transcript)
 			], cancellationToken: cancellationToken).ConfigureAwait(false);
 			var jsonContent = result.Value.Content[0].Text;
-			var characterSummaryFile = GetCharacterConfigFilePath(campaignName);
-			var charactersRootPath = GetCharactersRootPath(campaignName);
-			if (!Directory.Exists(charactersRootPath))
-			{
-				Directory.CreateDirectory(charactersRootPath);
-			}
 			var cleanedUpContent = jsonContent.Trim('`')[4..].Trim();
-			await File.WriteAllTextAsync(characterSummaryFile, cleanedUpContent, cancellationToken).ConfigureAwait(false);
+			await storageService.SaveCharacterSummaryAsync(campaignName, cleanedUpContent, cancellationToken).ConfigureAwait(false);
 			return Results.Content(cleanedUpContent, "application/json");
 		}).WithName("CreateCharacterSummary").WithOpenApi();
 
-		app.MapGet($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}", (string campaignName) =>
+		app.MapGet($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}", (string campaignName, CampaignStorageService storageService) =>
 		{
-			var charactersFile = GetCharacterConfigFilePath(campaignName);
-			if (!File.Exists(charactersFile))
+			var fs = storageService.GetCharacterSummary(campaignName);
+			if (fs is null)
 			{
-				return Results.NotFound("Character not found.");
+				return Results.NotFound("Character summary not found.");
 			}
-			var fs = File.OpenRead(charactersFile);
 			return Results.File(fs, "application/json");
 		}).WithName("GetCharacters").WithOpenApi();
 
-		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}/profile/{{characterName}}", async (string campaignName, string characterName, IHttpClientFactory httpClientFactory, ImageClient client, CancellationToken cancellationToken) =>
+		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}/profile/{{characterName}}", async (string campaignName, string characterName, CampaignStorageService storageService, IHttpClientFactory httpClientFactory, ImageClient client, CancellationToken cancellationToken) =>
 		{
-			var charactersFile = GetCharacterConfigFilePath(campaignName);
-			if (!File.Exists(charactersFile))
+			using var fs = storageService.GetCharacterSummary(campaignName);
+			if (fs is null)
 			{
 				return Results.NotFound("Character not found.");
 			}
-			using var fs = File.OpenRead(charactersFile);
 			var characterJson = await JsonNode.ParseAsync(fs, cancellationToken: cancellationToken).ConfigureAwait(false);
 			if (characterJson is not JsonArray characters)
 			{
@@ -123,20 +95,17 @@ public static class CharactersOperations
 			, cancellationToken: cancellationToken).ConfigureAwait(false);
 
 			using var stream = await GetImageStreamFromResult(result, httpClientFactory, cancellationToken).ConfigureAwait(false);
-			var imagePath = GetCharacterProfilePicturePath(campaignName, characterName);
-			using var imageFile = File.Create(imagePath);
-			await stream.CopyToAsync(imageFile, cancellationToken).ConfigureAwait(false);
+			await storageService.SaveCharacterProfilePictureAsync(campaignName, characterName, stream, cancellationToken).ConfigureAwait(false);
 			return Results.Created($"{Constants.CampaignsApiSegment}/{campaignName}{Constants.CharactersApiSegment}/profile/{characterName}", null);
 		}).WithName("CreateCharacterProfilePicture").WithOpenApi();
 
-		app.MapGet($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}/profile/{{characterName}}", (string campaignName, string characterName) =>
+		app.MapGet($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}/profile/{{characterName}}", (string campaignName, string characterName, CampaignStorageService storageService) =>
 		{
-			var imagePath = GetCharacterProfilePicturePath(campaignName, characterName);
-			if (!File.Exists(imagePath))
+			var imageStream = storageService.GetCharacterProfilePicture(campaignName, characterName);
+			if (imageStream is null)
 			{
 				return Results.NotFound("Character image not found.");
 			}
-			var imageStream = File.OpenRead(imagePath);
 			return Results.File(imageStream, "image/png");
 		}).WithName("GetCharacterProfilePicture").WithOpenApi();
 	}

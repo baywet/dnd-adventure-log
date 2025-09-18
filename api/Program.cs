@@ -36,6 +36,8 @@ builder.Services.AddSingleton(sp => new CustomVideoClient(
     builder.Configuration[$"AzureOpenAI:{Constants.EastUS2Region}"] ??
     throw new InvalidOperationException($"Please set the AzureOpenAI:{Constants.EastUS2Region} configuration value."), sp.GetRequiredService<IHttpClientFactory>()));
 
+builder.Services.AddSingleton<CampaignStorageService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
