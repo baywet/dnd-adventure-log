@@ -6,6 +6,35 @@ public class CampaignStorageService
 	{
 	}
 
+	public string[] ListCampaigns()
+	{
+		return Directory.GetDirectories(Constants.CampaignsDirectoryName)
+				.Select(filePath => Path.GetFileName(filePath))
+				.ToArray();
+	}
+
+	public bool CreateCampaign(string campaignName)
+	{
+		var campaignPath = GetCampaignRootPath(campaignName);
+		if (Directory.Exists(campaignPath))
+		{
+			return false;
+		}
+		Directory.CreateDirectory(campaignPath);
+		return true;
+	}
+
+	public bool DeleteCampaign(string campaignName)
+	{
+		var campaignPath = GetCampaignRootPath(campaignName);
+		if (!Directory.Exists(campaignPath))
+		{
+			return false;
+		}
+		Directory.Delete(campaignPath, true);
+		return true;
+	}
+
 	public async Task<string> GetCampaignTranscriptionForCharactersAsync(string campaignName, CancellationToken cancellationToken)
 	{
 		// get the first episode transcript file by oldest creation date first
@@ -71,5 +100,13 @@ public class CampaignStorageService
 		}
 
 		return Path.Combine(GetCharactersRootPath(campaignName), $"{characterName}.png");
+	}
+	public static string GetCampaignRootPath(string campaignName)
+	{
+		if (Path.IsPathRooted(campaignName) || campaignName.Contains("..", StringComparison.Ordinal))
+		{
+			throw new InvalidDataException("Name contains invalid characters.");
+		}
+		return Path.Combine(Constants.CampaignsDirectoryName, campaignName);
 	}
 }

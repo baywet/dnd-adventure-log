@@ -25,7 +25,7 @@ public static class RecordingOperations
 	public static string GetRecordingAssetsRootPath(string campaignName, string assetType)
 	{
 		ArgumentException.ThrowIfNullOrEmpty(assetType);
-		return Path.Combine(CampaignOperations.GetCampaignRootPath(campaignName), assetType);
+		return Path.Combine(CampaignStorageService.GetCampaignRootPath(campaignName), assetType);
 	}
 	public static string GetRecordingAssetPath(string campaignName, string recordingName, string assetType)
 	{
