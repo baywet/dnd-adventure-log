@@ -38,6 +38,8 @@ builder.Services.AddSingleton(sp => new CustomVideoClient(
 
 builder.Services.AddSingleton<CampaignStorageService>();
 
+builder.Services.AddSingleton<CampaignAnalysisService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

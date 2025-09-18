@@ -1,13 +1,10 @@
-using OpenAI.Audio;
-using OpenAI.Chat;
-
 namespace api;
 
 public static class RecordingOperations
 {
 	public static void AddRecordingOperations(this WebApplication app)
 	{
-		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}", async (HttpRequest request, string campaignName, CampaignStorageService storageService, AudioClient client, CancellationToken cancellationToken) =>
+		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}", async (HttpRequest request, string campaignName, CampaignAnalysisService analysisService, CancellationToken cancellationToken) =>
 		{
 			// Set max request body size to 1 GB for this endpoint
 			var maxRequestBodySizeFeature = request.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
@@ -26,25 +23,8 @@ public static class RecordingOperations
 			{
 				return Results.BadRequest("No files were uploaded.");
 			}
-			var options = new AudioTranscriptionOptions
-			{
-				ResponseFormat = AudioTranscriptionFormat.Text,
-				TimestampGranularities = AudioTimestampGranularities.Word | AudioTimestampGranularities.Segment,
-			};
 
-			var results = new List<string>();
-			foreach (var file in form.Files)
-			{
-				using var ms = new MemoryStream();
-				await file.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
-				ms.Position = 0;
-				var fileName = await storageService.SaveRecordingAsync(campaignName, file.FileName, ms, cancellationToken).ConfigureAwait(false);
-				ms.Position = 0;
-
-				var transcription = await AudioHelper.ChunkAndMergeTranscriptsIfRequired(ms, fileName, options, client, cancellationToken).ConfigureAwait(false);
-				await storageService.SaveTranscriptionAsync(campaignName, fileName, transcription, cancellationToken).ConfigureAwait(false);
-				results.Add(Path.GetFileNameWithoutExtension(fileName));
-			}
+			var results = await analysisService.SaveRecordingsAndGenerateTranscriptionsAsync(campaignName, form.Files, cancellationToken).ConfigureAwait(false);
 
 			return Results.Ok(results);
 		}).WithName("UploadRecording").WithOpenApi().DisableRequestTimeout();
@@ -57,31 +37,21 @@ public static class RecordingOperations
 			return Results.Ok(files);
 		}).WithName("ListRecordings").WithOpenApi();
 
-		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", async (string campaignName, string recordingName, CampaignStorageService storageService, CustomVideoClient customVideoClient, ChatClient client, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken) =>
+		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", async (string campaignName, string recordingName, CampaignAnalysisService analysisService, CancellationToken cancellationToken) =>
 		{
-			var transcription = await storageService.GetTranscriptionAsync(campaignName, recordingName, cancellationToken);
-			if (string.IsNullOrEmpty(transcription))
+			try
 			{
-				return Results.NotFound("Transcription not found.");
+				await analysisService.GenerateEpicMomentVideoAsync(campaignName, recordingName, cancellationToken);
 			}
-			var result = await client.CompleteChatAsync(
-			[
-				new SystemChatMessage(
-					"""
-					You are a bard following a group of dungeons and dragons heroes and tasked with collecting tales of their most epic moments during their adventures.
-					Analyze the transcript of this play session and extract a tale of an epic encounter. You might recount it as a 10 sentences story or ballad.
-					Exaggerate the details and the facts to make it more interesting and entertaining.
-					"""),
-				new UserChatMessage(transcription)
-			], cancellationToken: cancellationToken).ConfigureAwait(false);
-			var taleContent = result.Value.Content[0].Text;
-			await storageService.SaveEpicMomentTaleAsync(campaignName, recordingName, taleContent, cancellationToken).ConfigureAwait(false);
-			using var epicMomentVideo = await customVideoClient.GetEpicMomentVideoAsync(taleContent, cancellationToken).ConfigureAwait(false);
-			if (epicMomentVideo is null)
+			catch (FileNotFoundException ex)
 			{
-				return Results.StatusCode(500);
+				return Results.NotFound(ex.Message);
 			}
-			await storageService.SaveEpicMomentVideoAsync(campaignName, recordingName, epicMomentVideo, cancellationToken).ConfigureAwait(false);
+			catch (InvalidOperationException ex)
+			{
+				return Results.InternalServerError(ex.Message);
+			}
+			
 			return Results.Created();
 		}).WithName("CreateEpicMoment").WithOpenApi();
 
