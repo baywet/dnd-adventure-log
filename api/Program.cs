@@ -2,6 +2,7 @@ using Azure.AI.OpenAI;
 using Azure.Identity;
 using api;
 using System.ClientModel;
+using Azure.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,13 +17,15 @@ builder.Services.AddCors(options =>
                            .AllowAnyMethod()
                            .AllowAnyHeader());
 });
-builder.Services.AddSingleton<AzureNamedServicesHolder>(_ =>
+builder.Services.AddSingleton(new ApiKeyCredential(builder.Configuration["AzureOpenAIKey"] 
+             ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
+builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
 {
     AzureOpenAIClient createClient(string region) => new(
         new Uri(builder.Configuration[$"AzureOpenAI:{region}"] ??
                 throw new InvalidOperationException($"Please set the AzureOpenAI:{region} configuration value.")),
-        new ApiKeyCredential(builder.Configuration["AzureOpenAIKey"] 
-             ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
+            sp.GetRequiredService<ApiKeyCredential>()
+        );
     return new(new(StringComparer.OrdinalIgnoreCase)
     {
         { Constants.EastUS2Region, createClient(Constants.EastUS2Region) },
@@ -41,9 +44,32 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHold
                                         .GetImageClient("gpt-image-1"));
 builder.Services.AddHttpClient();
 
-builder.Services.AddSingleton(sp => new CustomVideoClient(
-    builder.Configuration[$"AzureOpenAI:{Constants.EastUS2Region}"] ??
-    throw new InvalidOperationException($"Please set the AzureOpenAI:{Constants.EastUS2Region} configuration value."), sp.GetRequiredService<IHttpClientFactory>()));
+builder.Services.AddSingleton(sp =>
+{
+    const string modelName = "sora";
+    var endpoint = builder.Configuration[$"AzureOpenAI:{Constants.EastUS2Region}"] ??
+    throw new InvalidOperationException($"Please set the AzureOpenAI:{Constants.EastUS2Region} configuration value.");
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    if (sp.GetService<ApiKeyCredential>() is { } apiKeyCredential)
+    {
+        return new CustomVideoClient(
+            endpoint,
+            httpClientFactory,
+            modelName,
+            apiKeyCredential
+        );
+    }
+    if (sp.GetService<TokenCredential>() is { } tokenCredential)
+    {
+        return new CustomVideoClient(
+            endpoint,
+            httpClientFactory,
+            modelName,
+            tokenCredential
+        );
+    }
+    throw new InvalidOperationException("No valid authentication method configured.");
+});
 
 builder.Services.AddSingleton<CampaignStorageService>();
 

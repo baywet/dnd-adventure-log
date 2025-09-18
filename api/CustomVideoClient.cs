@@ -1,5 +1,6 @@
+using System.ClientModel;
 using System.Text.Json.Nodes;
-using Azure.Identity;
+using Azure.Core;
 
 namespace api;
 
@@ -7,27 +8,57 @@ public class CustomVideoClient
 {
 	private readonly string _endpoint;
 	private readonly IHttpClientFactory _httpClientFactory;
+	private readonly string _modelName;
+	private readonly TokenCredential? _tokenCredentials;
+	private readonly ApiKeyCredential? _apiKeyCredential;
+	
+	public CustomVideoClient(string endpoint, IHttpClientFactory httpClientFactory, string modelName, ApiKeyCredential apiKeyCredential):this(endpoint, httpClientFactory, modelName)
+	{
+		ArgumentNullException.ThrowIfNull(apiKeyCredential);
+		_apiKeyCredential = apiKeyCredential;
+	}
 
-	public CustomVideoClient(string endpoint, IHttpClientFactory httpClientFactory)
+	public CustomVideoClient(string endpoint, IHttpClientFactory httpClientFactory, string modelName, TokenCredential tokenCredentials) : this(endpoint, httpClientFactory, modelName)
+	{
+		ArgumentNullException.ThrowIfNull(tokenCredentials);
+		_tokenCredentials = tokenCredentials;
+	}
+
+	public CustomVideoClient(string endpoint, IHttpClientFactory httpClientFactory, string modelName)
 	{
 		ArgumentException.ThrowIfNullOrEmpty(endpoint);
 		ArgumentNullException.ThrowIfNull(httpClientFactory);
+		ArgumentException.ThrowIfNullOrEmpty(modelName);
 		_endpoint = endpoint;
 		_httpClientFactory = httpClientFactory;
+		_modelName = modelName;
+	}
+	private async Task SetBaseAuthenticationHeaderAsync(HttpClient client)
+	{
+		var apiKey = string.Empty;
+		_apiKeyCredential?.Deconstruct(out apiKey);
+		if (!string.IsNullOrEmpty(apiKey))
+		{
+			client.DefaultRequestHeaders.Add("api-key", apiKey);
+		}
+		if (_tokenCredentials != null)
+		{
+			var token = await _tokenCredentials.GetTokenAsync(
+				new TokenRequestContext(new[] { "https://cognitiveservices.azure.com/.default" }),
+				CancellationToken.None).ConfigureAwait(false);
+			client.DefaultRequestHeaders.Authorization = new("Bearer", token.Token);
+		}
+		throw new InvalidOperationException("No valid authentication method configured.");
 	}
 	public async Task<Stream?> GetEpicMomentVideoAsync(string recounting, CancellationToken cancellationToken)
 	{
 		using var httpClient = _httpClientFactory.CreateClient();
 		httpClient.BaseAddress = new Uri(_endpoint);
-		var credentials = new DefaultAzureCredential();
-		var token = await credentials.GetTokenAsync(
-			new Azure.Core.TokenRequestContext(new[] { "https://cognitiveservices.azure.com/.default" }),
-			cancellationToken).ConfigureAwait(false);
-		httpClient.DefaultRequestHeaders.Authorization = new("Bearer", token.Token);
+		await SetBaseAuthenticationHeaderAsync(httpClient).ConfigureAwait(false);
 		using var response = await httpClient.PostAsJsonAsync("/openai/v1/video/generations/jobs?api-version=preview",
 			new
 			{
-				model = "sora",
+				model = _modelName,
 				prompt = recounting,
 				width = 1920,
 				height = 1080,
