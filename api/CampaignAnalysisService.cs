@@ -124,12 +124,15 @@ public class CampaignAnalysisService
 		}
 
 		using var httpClient = _httpClientFactory.CreateClient();
-		var imageResponse = await httpClient.GetAsync(result.Value.ImageUri.ToString(), cancellationToken).ConfigureAwait(false);
+		using var imageResponse = await httpClient.GetAsync(result.Value.ImageUri.ToString(), cancellationToken).ConfigureAwait(false);
 		if (!imageResponse.IsSuccessStatusCode)
 		{
 			throw new InvalidOperationException("Failed to download the image.");
 		}
-		return await imageResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+		var ms = new MemoryStream();
+		await imageResponse.Content.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+		ms.Position = 0;
+		return ms;
 	}
 
 	public async Task GenerateEpicMomentVideoAsync(string campaignName, string recordingName, CancellationToken cancellationToken)

@@ -72,11 +72,11 @@ public class CampaignStorageService
 		return fs;
 	}
 
-	public Task SaveCharacterProfilePictureAsync(string campaignName, string characterName, Stream imageStream, CancellationToken cancellationToken)
+	public async Task SaveCharacterProfilePictureAsync(string campaignName, string characterName, Stream imageStream, CancellationToken cancellationToken)
 	{
 		var imagePath = GetCharacterProfilePicturePath(campaignName, characterName);
 		using var imageFile = File.Create(imagePath);
-		return imageStream.CopyToAsync(imageFile, cancellationToken);
+		await imageStream.CopyToAsync(imageFile, cancellationToken).ConfigureAwait(false);
 	}
 	public Stream? GetCharacterProfilePicture(string campaignName, string characterName)
 	{
