@@ -8,12 +8,12 @@ import type {
   Campaign,
   Player,
   Players,
-  Transcription,
-  Transcriptions,
 } from "./types";
 import { ProcessState } from "./types";
-import { ApiAxiomService } from "./services/api.axiom.service";
+import { API_BASE_URL, ApiAxiomService } from "./services/api.axiom.service";
 import { CampaignList } from "./components/CampaignList";
+import { PlayerPortrait } from "./components/PlayerPortrait";
+import { EpicMomentVideo } from "./components/EpicMomentVideo";
 
 const App: React.FC = () => {
   const [processState, setProcessState] = useState<ProcessState>(
@@ -25,91 +25,106 @@ const App: React.FC = () => {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [transcript, setTranscript] = useState<string>("");
   const [players, setPlayers] = useState<Player[]>([]);
-  const [epicMomentVideoUrls, setEpicMomentVideoUrls] = useState<string[]>(
-    null
-  );
+  const [epicMomentVideoUrls, setEpicMomentVideoUrls] =
+    useState<string[]>(null);
 
   const resetState = useCallback(() => {
     setProcessState(ProcessState.Idle);
     setLoadingMessage("");
+    setSelectedCampaign(null);
     setError(null);
     setTranscript("");
-    setPlayers([]);
+    setPlayers([] as Player[]);
     setEpicMomentVideoUrls([]);
     setUploadedFiles([]);
   }, []);
 
-  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(
+    null
+  );
 
-  const handleFilesUpload = useCallback(async (files: File[]) => {
-    // Clear previous results and set processing state
-    setProcessState(ProcessState.Processing);
-    setError(null);
-    setTranscript("");
-    setPlayers([]);
-    setEpicMomentVideoUrls([]);
-    setUploadedFiles(files);
+const handleSelectCampaign = useCallback((campaign: Campaign) => {
+  resetState(); // Reset everything
+  setSelectedCampaign(campaign); // Then set the new campaign
+}, [resetState]);
 
-    try {
+  const handleFilesUpload = useCallback(
+    async (files: File[]) => {
+      // Clear previous results and set processing state
       setProcessState(ProcessState.Processing);
+      setError(null);
+      setTranscript("");
+      setPlayers([] as Player[]);
+      setEpicMomentVideoUrls([]);
+      setUploadedFiles(files);
 
-      if (!selectedCampaign || !selectedCampaign.name) {
-        setError("Please select a campaign before starting the ritual.");
-        return;
-      }
+      try {
+        setProcessState(ProcessState.Processing);
 
-      // Transcribe the audio files
-      setLoadingMessage("Asking our scrybe to write down the legend...");
-      await ApiAxiomService.uploadRecording(selectedCampaign.name, files);
+        if (!selectedCampaign || !selectedCampaign.name) {
+          setError("Please select a campaign before starting the ritual.");
+          return;
+        }
 
-      setLoadingMessage("Consulting the arcane orbs to identify the heroes...");
-      var players = await ApiAxiomService.generateCharacters(selectedCampaign.name);
-      //var players = []; 
+        // Transcribe the audio files
+        setLoadingMessage("Asking our scrybe to write down the legend...");
+        await ApiAxiomService.uploadRecording(selectedCampaign.name, files);
 
-      if(!players || players.length === 0) {
-       players = await ApiAxiomService.listCharacters(selectedCampaign.name);
-      } 
+        setLoadingMessage(
+          "Consulting the arcane orbs to identify the heroes..."
+        );
+        let players = await ApiAxiomService.generateCharacters(selectedCampaign.name);
+        //let players: Player[] = [];
 
-      for (const [i, player] of players.entries()) {
-          setLoadingMessage(`Painting portraits of the heroes (${i + 1}/${players.length})...`);  
+        if (!players || players.length === 0) {
+          players = await ApiAxiomService.listCharacters(selectedCampaign.name);
+        }
+
+        for (const [i, player] of players.entries()) {
+          setLoadingMessage(
+            `Painting portraits of the heroes (${i + 1}/${players.length})...`
+          );
           await ApiAxiomService.generateCharacterProfile(
-            selectedCampaign?.name,
+            selectedCampaign.name,
             player.name
           );
         }
 
-      setPlayers(players);
+        setPlayers(players);
 
-      var recordings = await ApiAxiomService.listRecordings(
-        selectedCampaign?.name || ""
-      );
+        var recordings = await ApiAxiomService.listRecordings(
+          selectedCampaign.name
+        );
 
-      setLoadingMessage("Summoning the epic moment from the ether...");
-      // for each recording create epic moment
-      for (const rec of recordings) {
-        await ApiAxiomService.createEpicMoment(
-          selectedCampaign?.name || "",
-          rec
-        ).then((epicMoment: any) => {
-          const addVideoUrl = (epicMoment: string) => {
-            setEpicMomentVideoUrls((prev) => [...prev, epicMoment]);
-          };
-        }).catch((err) => { console.error("The weave falters! The epic moment could not be conjured for recording:", rec, err); });
+        setLoadingMessage("Summoning the epic moment from the ether...");
+        for (const rec of recordings) {
+          await ApiAxiomService.createEpicMoment(
+            selectedCampaign.name,
+            rec
+          ).catch((err) => { console.error("The weave falters! The epic moment could not be conjured for recording:", rec, err); });
+          setEpicMomentVideoUrls((prev) => [
+            ...prev,
+            `${API_BASE_URL}/campaigns/${encodeURIComponent(
+              selectedCampaign.name
+            )}/recordings/${encodeURIComponent(rec)}/epic-moment`,
+          ]);
+        }
+
+        setProcessState(ProcessState.Success);
+      } catch (err) {
+        console.error(err);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "An unknown magical interference occurred."
+        );
+        setProcessState(ProcessState.Error);
+      } finally {
+        setLoadingMessage("");
       }
-
-      setProcessState(ProcessState.Success);
-    } catch (err) {
-      console.error(err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "An unknown magical interference occurred."
-      );
-      setProcessState(ProcessState.Error);
-    } finally {
-      setLoadingMessage("");
-    }
-  },[selectedCampaign]);
+    },
+    [selectedCampaign]
+  );
 
   const handleDeleteFile = useCallback(
     (indexToDelete: number) => {
@@ -127,31 +142,51 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-200">
-      <Header />
+      <Header onReset={resetState} />
       <main className="container mx-auto px-4 py-8 md:py-12">
         <div>
-          <CampaignList onSelect={setSelectedCampaign}></CampaignList>
+          <CampaignList onSelect={handleSelectCampaign} selected={selectedCampaign}></CampaignList>
         </div>
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto space-y-12">
           {processState === ProcessState.Idle && selectedCampaign && (
-            <FileUpload
-              onFilesUpload={handleFilesUpload}
-            />
+            <FileUpload onFilesUpload={handleFilesUpload} />
           )}
+
           {processState === ProcessState.Processing && (
-            <ProcessingView message={loadingMessage} />
+            <ProcessingView message={loadingMessage} />    
           )}
-          {processState === ProcessState.Success && (
-            <ResultsView
-              campaign={selectedCampaign.name}
-              files={uploadedFiles}
-              onDeleteFile={handleDeleteFile}
-              transcript={transcript}
-              players={players}
-              epicMomentVideoUrls={epicMomentVideoUrls}
-              onReset={resetState}
-            />
+
+          {/* Heroes Gallery */}
+          {selectedCampaign && players && players.length !== 0 && (
+              <section>
+              <h2 className="text-4xl font-title text-center text-yellow-400 mb-8">
+                The Heroes of the Quest
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                {players.map((player) => (
+                  <PlayerPortrait
+                    campaign={selectedCampaign?.name}
+                    key={player.name}
+                    player={player}
+                  />
+                ))}
+              </div>
+            </section>
           )}
+
+          {/* Epic Moment */}
+          {epicMomentVideoUrls && epicMomentVideoUrls.length !== 0 &&(
+            <section>
+              <h2 className="text-4xl font-title text-center text-yellow-400 mb-8">
+                The Epic Climax
+              </h2>
+              <EpicMomentVideo epicMomentVideoUrls={epicMomentVideoUrls} />
+            </section>
+          )}
+
+          {/* {processState === ProcessState.Success && (
+ 
+          )} */}
           {processState === ProcessState.Error && (
             <div className="text-center p-8 bg-gray-800 border border-red-500 rounded-lg">
               <h2 className="text-2xl font-title text-red-400 mb-4">

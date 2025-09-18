@@ -4,14 +4,14 @@ import { Campaign } from '@/types';
 
 interface CampaignListProps {
   onSelect?: (campaign: Campaign | null) => void;
+  selected?: Campaign | null;
 }
 
-export const CampaignList: React.FC<CampaignListProps> = ({ onSelect }) => {
+export const CampaignList: React.FC<CampaignListProps> = ({ onSelect, selected }) => {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [newCampaign, setNewCampaign] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Campaign | null>(null);
 
   const fetchCampaigns = async () => {
     setLoading(true);
@@ -89,11 +89,11 @@ export const CampaignList: React.FC<CampaignListProps> = ({ onSelect }) => {
         {campaigns.map((c) => (
           <li
             key={c.name}
-            className={`flex justify-between items-center py-2 ${selected?.name === c.name ? 'bg-yellow-900/30' : ''}`}
+            className={`flex justify-between items-center py-2 ${selected === c ? 'bg-yellow-900/30' : ''}`}
           >
             <button
-              className={`flex-1 text-left text-white ${selected?.name === c.name ? 'font-bold text-yellow-300' : ''}`}
-              onClick={() => setSelected(c)}
+              className={`flex-1 text-left text-white ${selected === c ? 'font-bold text-yellow-300' : ''}`}
+              onClick={() => onSelect(c)}
               disabled={loading}
             >
               {c.name}
