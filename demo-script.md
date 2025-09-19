@@ -11,6 +11,7 @@
 ## Getting ready
 
 1. Updated `appsettings.development.json` with the endpoint.
+1. Create an agent in AI Foundry, with the transcripts as knowledge (Vector DB).
 1. Browser open to [ai.azure.com](https://ai.azure.com)
 1. VSCode open to this repository, with the model-instructions open.
 1. Terminal open, and signed in to azure `az login --tenant "vincentbirethotmail.onmicrosoft.com"`.
@@ -72,3 +73,9 @@
 
 1. Navigate to CampaignAnalysisService.cs, GenerateEpicMomentVideoAsync.
 1. Explain we're using a custom made video client, show the complexity.
+
+### Indexing content
+
+1. Go to the Foundry portal, select the Agents menu.
+1. Select the only agent, show the uploaded transcripts.
+1. Select go to playground and type `Did we encounter any goblins in the past? and how did that go?`.
