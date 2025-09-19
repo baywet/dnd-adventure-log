@@ -85,8 +85,6 @@ app.AddRecordingOperations();
 app.AddCharacterOperations();
 app.UseStaticFiles();
 
-app.MapGet("/app", () => Results.Redirect("/index.html"));
-
 Directory.CreateDirectory(Constants.CampaignsDirectoryName);
 
 await app.RunAsync();
