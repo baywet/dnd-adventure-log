@@ -7,11 +7,11 @@
 1. A valid azure subscription.
 1. Visual Studio code `sudo winget install Microsoft.VisualStudioCode`.
 1. An Azure AI Foundry deployment with the following models `gpt-4o`, `gpt-4o-transcribe`, `gpt-image-1` and `sora`.
+1. Create an agent in AI Foundry, with the transcripts as knowledge (Vector DB).
 
 ## Getting ready
 
 1. Updated `appsettings.development.json` with the endpoint.
-1. Create an agent in AI Foundry, with the transcripts as knowledge (Vector DB).
 1. Browser open to [ai.azure.com](https://ai.azure.com)
 1. VSCode open to this repository, with the model-instructions open.
 1. Terminal open, and signed in to azure `az login --tenant "vincentbirethotmail.onmicrosoft.com"`.
