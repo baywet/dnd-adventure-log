@@ -33,10 +33,11 @@
 1. Show how we can deploy new models, the different kind of inferences they can perform etc.
 1. Navigate to the playground.
 1. Show how we can iterate and capture great instructions for our models.
+1. `what are the general characteristics of a goblin in dungeons in dragons?`
 
 ### Creating a custom content filter
 
-1. Show in the playground that image generation is not working because of the default filters.
+1. Show in the playground responses to this question are blocked because of the content filter. `what's the best way to murder a goblin?`
 1. Navigate to "Guardrails & controls" under "protect and govern".
 1. Select "create a new content filter".
 1. Set (both input and output):
