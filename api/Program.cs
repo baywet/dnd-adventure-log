@@ -11,8 +11,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSingleton<TokenCredential, DefaultAzureCredential>();
-// builder.Services.AddSingleton(new ApiKeyCredential(builder.Configuration["AzureOpenAIKey"] 
-//              ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
+//builder.Services.AddSingleton(new ApiKeyCredential(builder.Configuration["AzureOpenAIKey"] 
+ //            ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
 builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
 {
     AzureOpenAIClient createClientWithUri(Uri uri) =>
@@ -29,6 +29,7 @@ builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
         { Constants.EastUS2Region, createClient(Constants.EastUS2Region) },
     });
 });
+
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
                                         .GetService(Constants.EastUS2Region)
                                         .GetAudioClient("gpt-4o-transcribe"));
@@ -82,6 +83,7 @@ app.UseHttpsRedirection();
 app.AddCampaignOperations();
 app.AddRecordingOperations();
 app.AddCharacterOperations();
+app.UseStaticFiles();
 
 Directory.CreateDirectory(Constants.CampaignsDirectoryName);
 
