@@ -1,6 +1,5 @@
 import React from 'react';
 import { D20Icon } from './icons/D20Icon';
-import { ApiService } from '../services/api.service';
 
 export const Header: React.FC = ({onReset}) => {
 
@@ -13,11 +12,16 @@ export const Header: React.FC = ({onReset}) => {
             D&D Quest Visualizer
           </h1>
         </div>
-        <div className="absolute right-4 top-4">
+        <div className="absolute right-4 top-4 flex gap-4">
         <button
           onClick={onReset}
           className="bg-yellow-600 text-gray-900 font-bold py-3 px-8 rounded-lg hover:bg-yellow-500 transition-colors duration-300 text-lg">
           Start new ritual
+        </button>
+        <button
+          onClick={() => window.location.href = '/api-docs'}
+          className="bg-yellow-600 text-gray-900 font-bold py-3 px-8 rounded-lg hover:bg-yellow-500 transition-colors duration-300 text-lg">
+          API documentation
         </button>
         </div>
       </div>
