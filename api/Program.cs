@@ -10,9 +10,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
-// builder.Services.AddSingleton<TokenCredential, DefaultAzureCredential>();
-builder.Services.AddSingleton(new ApiKeyCredential(builder.Configuration["AzureOpenAIKey"] 
-             ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
+builder.Services.AddSingleton<TokenCredential, DefaultAzureCredential>();
+//builder.Services.AddSingleton(new ApiKeyCredential(builder.Configuration["AzureOpenAIKey"] 
+ //            ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
 builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
 {
     AzureOpenAIClient createClientWithUri(Uri uri) =>
