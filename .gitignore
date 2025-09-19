@@ -422,6 +422,7 @@ autom4te.cache/
 tarballs/
 test-results/
 /frontend/.vite/deps
+/api/wwwroot
 
 # Mac bundle stuff
 *.dmg

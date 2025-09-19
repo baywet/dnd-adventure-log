@@ -17,4 +17,20 @@
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="9.0.4" />
   </ItemGroup>
 
+  <Target Name="BuildFrontend" BeforeTargets="Build">
+    <!-- Build the frontend (adjust command as needed) -->
+    <Exec Command="npm install" WorkingDirectory="../frontend" />
+    <Exec Command="npm run build" WorkingDirectory="../frontend" />
+  </Target>
+
+  <Target Name="CopyFrontend" AfterTargets="Build">
+    <RemoveDir Directories="wwwroot" />
+    <MakeDir Directories="wwwroot" />
+    <Copy SourceFiles="@(FrontendFiles)" DestinationFolder="wwwroot\%(RecursiveDir)" SkipUnchangedFiles="false" />
+  </Target>
+
+  <ItemGroup>
+    <FrontendFiles Include="..\frontend\dist\**\*" />
+  </ItemGroup>
+
 </Project>

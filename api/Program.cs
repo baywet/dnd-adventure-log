@@ -29,13 +29,7 @@ builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
         { Constants.EastUS2Region, createClient(Constants.EastUS2Region) },
     });
 });
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll",
-        builder => builder.AllowAnyOrigin()
-                           .AllowAnyMethod()
-                           .AllowAnyHeader());
-});
+
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
                                         .GetService(Constants.EastUS2Region)
                                         .GetAudioClient("gpt-4o-transcribe"));
@@ -89,7 +83,9 @@ app.UseHttpsRedirection();
 app.AddCampaignOperations();
 app.AddRecordingOperations();
 app.AddCharacterOperations();
-app.UseCors("AllowAll");
+app.UseStaticFiles();
+
+app.MapGet("/app", () => Results.Redirect("/index.html"));
 
 Directory.CreateDirectory(Constants.CampaignsDirectoryName);
 

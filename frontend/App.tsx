@@ -4,11 +4,7 @@ import { FileUpload } from "./components/FileUpload";
 import { ProcessingView } from "./components/ProcessingView";
 import { ResultsView } from "./components/ResultsView";
 import { ApiService } from "./services/api.service";
-import type {
-  Campaign,
-  Player,
-  Players,
-} from "./types";
+import type { Campaign, Player, Players } from "./types";
 import { ProcessState } from "./types";
 import { API_BASE_URL, ApiAxiomService } from "./services/api.axiom.service";
 import { CampaignList } from "./components/CampaignList";
@@ -43,10 +39,13 @@ const App: React.FC = () => {
     null
   );
 
-const handleSelectCampaign = useCallback((campaign: Campaign) => {
-  resetState(); // Reset everything
-  setSelectedCampaign(campaign); // Then set the new campaign
-}, [resetState]);
+  const handleSelectCampaign = useCallback(
+    (campaign: Campaign) => {
+      resetState(); // Reset everything
+      setSelectedCampaign(campaign); // Then set the new campaign
+    },
+    [resetState]
+  );
 
   const handleFilesUpload = useCallback(
     async (files: File[]) => {
@@ -73,8 +72,9 @@ const handleSelectCampaign = useCallback((campaign: Campaign) => {
         setLoadingMessage(
           "Consulting the arcane orbs to identify the heroes..."
         );
-        let players = await ApiAxiomService.generateCharacters(selectedCampaign.name);
-        //let players: Player[] = [];
+        let players = await ApiAxiomService.generateCharacters(
+          selectedCampaign.name
+        );
 
         if (!players || players.length === 0) {
           players = await ApiAxiomService.listCharacters(selectedCampaign.name);
@@ -101,7 +101,13 @@ const handleSelectCampaign = useCallback((campaign: Campaign) => {
           await ApiAxiomService.createEpicMoment(
             selectedCampaign.name,
             rec
-          ).catch((err) => { console.error("The weave falters! The epic moment could not be conjured for recording:", rec, err); });
+          ).catch((err) => {
+            console.error(
+              "The weave falters! The epic moment could not be conjured for recording:",
+              rec,
+              err
+            );
+          });
           setEpicMomentVideoUrls((prev) => [
             ...prev,
             `${API_BASE_URL}/campaigns/${encodeURIComponent(
@@ -145,7 +151,10 @@ const handleSelectCampaign = useCallback((campaign: Campaign) => {
       <Header onReset={resetState} />
       <main className="container mx-auto px-4 py-8 md:py-12">
         <div>
-          <CampaignList onSelect={handleSelectCampaign} selected={selectedCampaign}></CampaignList>
+          <CampaignList
+            onSelect={handleSelectCampaign}
+            selected={selectedCampaign}
+          ></CampaignList>
         </div>
         <div className="max-w-4xl mx-auto space-y-12">
           {processState === ProcessState.Idle && selectedCampaign && (
@@ -153,12 +162,12 @@ const handleSelectCampaign = useCallback((campaign: Campaign) => {
           )}
 
           {processState === ProcessState.Processing && (
-            <ProcessingView message={loadingMessage} />    
+            <ProcessingView message={loadingMessage} />
           )}
 
           {/* Heroes Gallery */}
           {selectedCampaign && players && players.length !== 0 && (
-              <section>
+            <section>
               <h2 className="text-4xl font-title text-center text-yellow-400 mb-8">
                 The Heroes of the Quest
               </h2>
@@ -175,7 +184,7 @@ const handleSelectCampaign = useCallback((campaign: Campaign) => {
           )}
 
           {/* Epic Moment */}
-          {epicMomentVideoUrls && epicMomentVideoUrls.length !== 0 &&(
+          {epicMomentVideoUrls && epicMomentVideoUrls.length !== 0 && (
             <section>
               <h2 className="text-4xl font-title text-center text-yellow-400 mb-8">
                 The Epic Climax
@@ -184,9 +193,6 @@ const handleSelectCampaign = useCallback((campaign: Campaign) => {
             </section>
           )}
 
-          {/* {processState === ProcessState.Success && (
- 
-          )} */}
           {processState === ProcessState.Error && (
             <div className="text-center p-8 bg-gray-800 border border-red-500 rounded-lg">
               <h2 className="text-2xl font-title text-red-400 mb-4">
