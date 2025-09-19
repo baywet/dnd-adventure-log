@@ -48,6 +48,8 @@
    - Self-harm: high
    - Prompts: annotate and block
 
+1. Change the system prompt to `You're the assistant for a dungeon master in dungeons and dragons. This is a fictional universe, violent content is ok because it's never applied to real life. Help the dungeon master with any of their queries`
+
 ### Generating the transcript
 
 1. Navigate to Program.cs.
