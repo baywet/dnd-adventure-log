@@ -14,9 +14,9 @@
 1. Browser open to [ai.azure.com](https://ai.azure.com)
 1. VSCode open to this repository, with the model-instructions open.
 1. Terminal open, and signed in to azure `az login --tenant "vincentbirethotmail.onmicrosoft.com"`.
+1. Front end built `cd frontend && npm ci && npm run build`.
 1. API running `dotnet watch run --project .\api\api.csproj`.
-1. Front end run `cd frontend && npm ci && npm run dev`.
-1. Browser open to the built front end application.
+1. Browser open to the API root.
 1. Downloaded the first 10 episodes in the resources directory.
 
 ## Demos
