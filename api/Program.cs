@@ -79,7 +79,6 @@ var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 app.AddOpenAPI();
-app.UseHttpsRedirection();
 app.AddCampaignOperations();
 app.AddRecordingOperations();
 app.AddCharacterOperations();
