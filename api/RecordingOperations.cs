@@ -27,7 +27,7 @@ public static class RecordingOperations
 			var results = await analysisService.SaveRecordingsAndGenerateTranscriptionsAsync(campaignName, form.Files, cancellationToken).ConfigureAwait(false);
 
 			return Results.Ok(results);
-		}).WithName("UploadRecording").WithOpenApi().Produces<string[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType).ProducesProblem(StatusCodes.Status400BadRequest).DisableRequestTimeout();
+		}).WithName("UploadRecording").Produces<string[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType).ProducesProblem(StatusCodes.Status400BadRequest).DisableRequestTimeout();
 
 		app.MapGet($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}", (string campaignName, CampaignStorageService storageService) =>
 		{
@@ -35,7 +35,7 @@ public static class RecordingOperations
 				.ToArray();
 
 			return Results.Ok(files);
-		}).WithName("ListRecordings").WithOpenApi().Produces<string[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType);
+		}).WithName("ListRecordings").Produces<string[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType);
 
 		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", async (string campaignName, string recordingName, IAnalysisService analysisService, CancellationToken cancellationToken) =>
 		{
@@ -53,7 +53,7 @@ public static class RecordingOperations
 				return Results.InternalServerError(ex.Message);
 			}
 
-		}).WithName("CreateEpicMoment").WithOpenApi().Produces<Stream>(contentType: "video/mp4").ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status500InternalServerError);
+		}).WithName("CreateEpicMoment").Produces<Stream>(contentType: "video/mp4").ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status500InternalServerError);
 
 		app.MapGet($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.RecordingsApiSegment}/{{recordingName}}{Constants.EpicMomentsApiSegment}", (string campaignName, string recordingName, CampaignStorageService storageService) =>
 		{
@@ -63,6 +63,6 @@ public static class RecordingOperations
 				return Results.NotFound("Epic moment video not found.");
 			}
 			return Results.Stream(epicMomentVideoStream, "video/mp4");
-		}).WithName("GetEpicMoment").WithOpenApi().Produces<Stream>(StatusCodes.Status200OK, "video/mp4").Produces(StatusCodes.Status404NotFound);
+		}).WithName("GetEpicMoment").Produces<Stream>(StatusCodes.Status200OK, "video/mp4").Produces(StatusCodes.Status404NotFound);
 	}
 }

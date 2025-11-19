@@ -19,7 +19,7 @@ public static class CharactersOperations
 			{
 				return Results.InternalServerError(ex.Message);
 			}
-		}).WithName("CreateCharacterSummary").WithOpenApi().Produces<Character[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status500InternalServerError);
+		}).WithName("CreateCharacterSummary").Produces<Character[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status500InternalServerError);
 
 		app.MapGet($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}", (string campaignName, CampaignStorageService storageService) =>
 		{
@@ -29,7 +29,7 @@ public static class CharactersOperations
 				return Results.NotFound("Character summary not found.");
 			}
 			return Results.File(fs, "application/json");
-		}).WithName("GetCharacters").WithOpenApi().Produces<Character[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType).Produces(StatusCodes.Status404NotFound);
+		}).WithName("GetCharacters").Produces<Character[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType).Produces(StatusCodes.Status404NotFound);
 
 		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}/profile/{{characterName}}", async (string campaignName, string characterName, IAnalysisService analysisService, CancellationToken cancellationToken) =>
 		{
@@ -46,7 +46,7 @@ public static class CharactersOperations
 			{
 				return Results.InternalServerError(ex.Message);
 			}
-		}).WithName("CreateCharacterProfilePicture").WithOpenApi().Produces<Stream>(contentType: "image/png").ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status500InternalServerError);
+		}).WithName("CreateCharacterProfilePicture").Produces<Stream>(contentType: "image/png").ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status500InternalServerError);
 
 		app.MapGet($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}/profile/{{characterName}}", (string campaignName, string characterName, CampaignStorageService storageService) =>
 		{
@@ -56,6 +56,6 @@ public static class CharactersOperations
 				return Results.NotFound("Character image not found.");
 			}
 			return Results.File(imageStream, "image/png");
-		}).WithName("GetCharacterProfilePicture").WithOpenApi().Produces<Stream>(StatusCodes.Status200OK, "image/png").Produces(StatusCodes.Status404NotFound);
+		}).WithName("GetCharacterProfilePicture").Produces<Stream>(StatusCodes.Status200OK, "image/png").Produces(StatusCodes.Status404NotFound);
 	}
 }
