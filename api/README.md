@@ -1,6 +1,6 @@
 # DnD adventurer log - backend API
 
-This backend API is written using dotnet 9 minimal APIs.
+This backend API is written using dotnet 10 minimal APIs.
 
 ## Getting started
 
@@ -17,7 +17,7 @@ This backend API is written using dotnet 9 minimal APIs.
 
 ## Requirements
 
-- Dotnet SDK 9
+- Dotnet SDK 10
 - Azure CLI
 
 ## Architecture
