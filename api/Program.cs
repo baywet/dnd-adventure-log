@@ -30,21 +30,30 @@ builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
     });
 });
 
-builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(Constants.EastUS2Region)
-                                        .GetAudioClient("gpt-4o-transcribe"));
+string GetModelName(string modelKey) =>
+    builder.Configuration[$"ModelDeploymentNames:{modelKey}"] ??
+    throw new InvalidOperationException($"Please set the ModelDeploymentNames:{modelKey} configuration value.");
 
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
                                         .GetService(Constants.EastUS2Region)
-                                        .GetChatClient("gpt-4o"));
+                                        .GetAudioClient(GetModelName("Audio")));
+
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
                                         .GetService(Constants.EastUS2Region)
-                                        .GetImageClient("gpt-image-1"));
+                                        .GetChatClient(GetModelName("Chat")));
+
+builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
+                                        .GetService(Constants.EastUS2Region)
+                                        .GetResponsesClient(GetModelName("Responses")));
+
+builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
+                                        .GetService(Constants.EastUS2Region)
+                                        .GetImageClient(GetModelName("Image")));
 builder.Services.AddHttpClient();
 
 builder.Services.AddSingleton(sp =>
 {
-    const string modelName = "sora";
+    var modelName = GetModelName("Video");
     var endpoint = builder.Configuration[$"AzureOpenAI:{Constants.EastUS2Region}"] ??
     throw new InvalidOperationException($"Please set the AzureOpenAI:{Constants.EastUS2Region} configuration value.");
     var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
