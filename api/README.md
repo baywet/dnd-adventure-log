@@ -5,7 +5,7 @@ This backend API is written using dotnet 10 minimal APIs.
 ## Getting started
 
 1. Ensure you update the service endpoint in `appsettings.Development.json`.
-1. Ensure your service has the following models provisioned `gpt-4o-transcribe`, `gpt-4o`, `gpt-image-1` and `sora`.
+1. Ensure your service has the following models provisioned `gpt-4o-mini-transcribe`, `gpt-4o`, `gpt-image-1` and `sora`.
 1. Login with the Azure CLI `az login` so the application can authenticate to your Azure AI Foundry instance.
 1. Run the command below to start the API locally, and reload on code changes.
 
