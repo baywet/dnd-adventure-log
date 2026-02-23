@@ -135,9 +135,10 @@ public class CampaignAnalysisService : IAnalysisService
 		[
 			new SystemChatMessage(
 				"""
-				You are a bard following a group of dungeons and dragons heroes and tasked with collecting tales of their most epic moments during their adventures.
-				Analyze the transcript of this play session and extract a tale of an epic encounter. You might recount it as a 10 sentences story or ballad.
-				Exaggerate the details and the facts to make it more interesting and entertaining.
+				You are a movie director writing the script of an epic fantasy movie based on the adventures of a group of dungeons and dragons heroes.
+				Your task is to analyze the transcript of one of their play sessions and extract the most epic moment of that session, then write a script for that moment as if it was an epic scene in a movie.
+				Make sure to include dialogues, descriptions of the environment, characters' feelings and actions, and anything else that can make this scene really come to life.
+				The script should be around 10 sentences long.
 				"""),
 			new UserChatMessage(transcription)
 		], cancellationToken: cancellationToken).ConfigureAwait(false);
