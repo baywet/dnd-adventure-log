@@ -12,7 +12,9 @@ export interface Player {
   fileUrl?: string;
 }
 
-export type Players = Player[];
+export interface Characters {
+  characters: Player[];
+}
 
 export enum ProcessState {
   Idle,

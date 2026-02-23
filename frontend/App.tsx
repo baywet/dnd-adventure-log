@@ -2,9 +2,7 @@ import React, { useState, useCallback } from "react";
 import { Header } from "./components/Header";
 import { FileUpload } from "./components/FileUpload";
 import { ProcessingView } from "./components/ProcessingView";
-import { ResultsView } from "./components/ResultsView";
-import { ApiService } from "./services/api.service";
-import type { Campaign, Player, Players } from "./types";
+import type { Campaign, Player, Characters } from "./types";
 import { ProcessState } from "./types";
 import { API_BASE_URL, ApiAxiomService } from "./services/api.axiom.service";
 import { CampaignList } from "./components/CampaignList";
@@ -76,13 +74,13 @@ const App: React.FC = () => {
           selectedCampaign.name
         );
 
-        if (!players || players.length === 0) {
+        if (!players?.characters?.length) {
           players = await ApiAxiomService.listCharacters(selectedCampaign.name);
         }
 
-        for (const [i, player] of players.entries()) {
+        for (const [i, player] of players.characters.entries()) {
           setLoadingMessage(
-            `Painting portraits of the heroes (${i + 1}/${players.length})...`
+            `Painting portraits of the heroes (${i + 1}/${players.characters.length})...`
           );
           await ApiAxiomService.generateCharacterProfile(
             selectedCampaign.name,
@@ -90,7 +88,7 @@ const App: React.FC = () => {
           );
         }
 
-        setPlayers(players);
+        setPlayers(players.characters);
 
         var recordings = await ApiAxiomService.listRecordings(
           selectedCampaign.name

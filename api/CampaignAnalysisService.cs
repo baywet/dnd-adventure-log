@@ -3,12 +3,13 @@ using System.Text.Json;
 using OpenAI.Audio;
 using OpenAI.Chat;
 using OpenAI.Images;
+using OpenAI.Responses;
 
 namespace api;
 
 public class CampaignAnalysisService : IAnalysisService
 {
-	public CampaignAnalysisService(CampaignStorageService storageService, CustomVideoClient customVideoClient, ChatClient chatClient, AudioClient audioClient, IHttpClientFactory httpClientFactory, ImageClient imageClient)
+	public CampaignAnalysisService(CampaignStorageService storageService, CustomVideoClient customVideoClient, ChatClient chatClient, AudioClient audioClient, IHttpClientFactory httpClientFactory, ImageClient imageClient, ResponsesClient responsesClient)
 	{
 		ArgumentNullException.ThrowIfNull(storageService);
 		ArgumentNullException.ThrowIfNull(customVideoClient);
@@ -16,12 +17,14 @@ public class CampaignAnalysisService : IAnalysisService
 		ArgumentNullException.ThrowIfNull(audioClient);
 		ArgumentNullException.ThrowIfNull(httpClientFactory);
 		ArgumentNullException.ThrowIfNull(imageClient);
+		ArgumentNullException.ThrowIfNull(responsesClient);
 		_storageService = storageService;
 		_customVideoClient = customVideoClient;
 		_chatClient = chatClient;
 		_audioClient = audioClient;
 		_imageClient = imageClient;
 		_httpClientFactory = httpClientFactory;
+		_responsesClient = responsesClient;
 	}
 
 	private readonly CampaignStorageService _storageService;
@@ -30,6 +33,7 @@ public class CampaignAnalysisService : IAnalysisService
 	private readonly AudioClient _audioClient;
 	private readonly ImageClient _imageClient;
 	private readonly IHttpClientFactory _httpClientFactory;
+	private readonly ResponsesClient _responsesClient;
 
 	public async Task<string> ExtractCharactersAsync(string campaignName, CancellationToken cancellationToken)
 	{
@@ -38,44 +42,75 @@ public class CampaignAnalysisService : IAnalysisService
 		{
 			throw new FileNotFoundException("No transcript found for this campaign.");
 		}
-		var result = await _chatClient.CompleteChatAsync(
-		[
-			new SystemChatMessage(
-				"""
-				You are a note taker assisting a group of dungeons and dragons players tasked with recording and putting together recaps of each play session so the dungeon master and players can get insights from previous sessions.
-				The transcripts provided to you might contain dialogues that are not relevant to the game, you should ignore those.
-				Format the response as JSON using the following JSON schema:
+		var response = await _responsesClient.CreateResponseAsync(
+			new CreateResponseOptions
+			(
+				[
+					ResponseItem.CreateSystemMessageItem(
+						"""
+						You are a note taker assisting a group of dungeons and dragons players tasked with recording and putting together recaps of each play session so the dungeon master and players can get insights from previous sessions.
+						The transcripts provided to you might contain dialogues that are not relevant to the game, you should ignore those.
+						"""
+					),
+					ResponseItem.CreateUserMessageItem(
+						"""
+						Based on the following transcript, give me a summary of the characters in this adventure in a form of 3 sentences per character. I'm interested in their cast, race, level, physical appearance and background.
+						"""
+					),
+					ResponseItem.CreateUserMessageItem(transcript),
+				]
+			)
+			{
+				TextOptions = new ResponseTextOptions
 				{
-					"type": "array",
-					"items": {
-						"type": "object",
-						"properties": {
-							"name": { "type": "string" },
-							"description": { "type": "string" },
-							"level": { "type": "integer", "nullable": true },
-							"race": { "type": "string", "nullable": true }
+					TextFormat = ResponseTextFormat.CreateJsonSchemaFormat("characters", BinaryData.FromString
+					(
+						"""
+						{
+						    "type": "object",
+						    "properties": {
+						        "characters": {
+									"type": "array",
+									"items": {
+										"type": "object",
+										"properties": {
+											"name": { "type": "string" },
+											"description": { "type": "string" },
+											"level": { "type": "integer", "nullable": true },
+											"race": { "type": "string", "nullable": true }
+										},
+										"required": [
+											"name",
+											"description",
+											"level",
+											"race"
+										],
+										"additionalProperties": false
+									}
+								}
+							},
+							"required": [
+								"characters"
+							],
+							"additionalProperties": false
 						}
-					}
+					"""
+					))
 				}
-				"""),
-			new UserChatMessage(
-				"""
-				Based on the following transcript, give me a summary of the characters in this adventure in a form of 3 sentences per character. I'm interested in their cast, race, level, physical appearance and background.
-				"""),
-			new UserChatMessage(transcript)
-		], cancellationToken: cancellationToken).ConfigureAwait(false);
-		var jsonContent = result?.Value.Content[0].Text ?? throw new InvalidOperationException("Failed to extract characters.");
-		var cleanedUpContent = jsonContent.Trim('`')[4..].Trim();
-		await _storageService.SaveCharacterSummaryAsync(campaignName, cleanedUpContent, cancellationToken).ConfigureAwait(false);
-		return cleanedUpContent;
+			},
+			cancellationToken: cancellationToken
+		).ConfigureAwait(false);
+		var jsonContent = response.Value.GetOutputText() ?? throw new InvalidOperationException("Failed to extract characters.");
+		await _storageService.SaveCharacterSummaryAsync(campaignName, jsonContent, cancellationToken).ConfigureAwait(false);
+		return jsonContent;
 	}
 
 	public async Task<Stream> GenerateCharacterProfilePictureAsync(string campaignName, string characterName, CancellationToken cancellationToken)
 	{
 		using var fs = _storageService.GetCharacterSummary(campaignName) ?? throw new FileNotFoundException("Characters summary not found.");
-		var characters = await JsonSerializer.DeserializeAsync<List<Character>>(fs, cancellationToken: cancellationToken).ConfigureAwait(false)
+		var characters = await JsonSerializer.DeserializeAsync<CharacterList>(fs, cancellationToken: cancellationToken).ConfigureAwait(false)
 			?? throw new InvalidOperationException("Invalid character summary format.");
-		var character = characters.FirstOrDefault(c => characterName.Equals(c.name, StringComparison.OrdinalIgnoreCase)) ?? throw new FileNotFoundException("Character not found.");
+		var character = characters.characters.FirstOrDefault(c => characterName.Equals(c.name, StringComparison.OrdinalIgnoreCase)) ?? throw new FileNotFoundException("Character not found.");
 		var characterDescription = character.description ?? string.Empty;
 		if (string.IsNullOrEmpty(characterDescription))
 		{

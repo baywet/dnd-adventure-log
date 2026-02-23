@@ -1,4 +1,4 @@
-import { Player } from '@/types';
+import { Characters } from '@/types';
 import axios from 'axios';
 
 export const API_BASE_URL = 'http://localhost:5051';
@@ -53,18 +53,18 @@ export class ApiAxiomService {
   }
 
   // --- Characters ---
-  static async generateCharacters(campaignName: string): Promise<any> {
+  static async generateCharacters(campaignName: string): Promise<Characters> {
     const response = await axios.post(
       `${API_BASE_URL}/campaigns/${encodeURIComponent(campaignName)}/characters`
     );
     return response.data;
   }
 
-  static async listCharacters(campaignName: string): Promise<Player[]> {
+  static async listCharacters(campaignName: string): Promise<Characters> {
     const response = await axios.get(
       `${API_BASE_URL}/campaigns/${encodeURIComponent(campaignName)}/characters`
     );
-    return response.data as Player[];
+    return response.data as Characters;
   }
 
   static async generateCharacterProfile(campaignName: string, characterName: string): Promise<any> {
