@@ -6,7 +6,7 @@
 1. Azure CLI `sudo winget install Microsoft.AzureCLI`.
 1. A valid azure subscription.
 1. Visual Studio code `sudo winget install Microsoft.VisualStudioCode`.
-1. An Azure AI Foundry deployment with the following models `gpt-4o`, `gpt-4o-transcribe`, `gpt-image-1` and `sora`.
+1. An Azure AI Foundry deployment with the following models `gpt-4o`, `gpt-4o-mini-transcribe`, `gpt-image-1` and `sora`.
 1. Create an agent in AI Foundry, with the transcripts as knowledge (Vector DB).
 
 ## Getting ready
