@@ -3,6 +3,7 @@ using Azure.Identity;
 using api;
 using System.ClientModel;
 using Azure.Core;
+using OpenAI.Videos;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,6 +50,11 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHold
 builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
                                         .GetService(Constants.EastUS2Region)
                                         .GetImageClient(GetModelName("Image")));
+
+builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
+                                        .GetService(Constants.EastUS2Region)
+                                        .GetVideoClient());
+
 builder.Services.AddHttpClient();
 
 builder.Services.AddSingleton(sp =>
@@ -56,26 +62,11 @@ builder.Services.AddSingleton(sp =>
     var modelName = GetModelName("Video");
     var endpoint = builder.Configuration[$"AzureOpenAI:{Constants.EastUS2Region}"] ??
     throw new InvalidOperationException($"Please set the AzureOpenAI:{Constants.EastUS2Region} configuration value.");
-    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-    if (sp.GetService<ApiKeyCredential>() is { } apiKeyCredential)
-    {
-        return new CustomVideoClient(
-            endpoint,
-            httpClientFactory,
-            modelName,
-            apiKeyCredential
-        );
-    }
-    if (sp.GetService<TokenCredential>() is { } tokenCredential)
-    {
-        return new CustomVideoClient(
-            endpoint,
-            httpClientFactory,
-            modelName,
-            tokenCredential
-        );
-    }
-    throw new InvalidOperationException("No valid authentication method configured.");
+    var videoClient = sp.GetRequiredService<VideoClient>();
+    return new CustomVideoClient(
+        videoClient,
+        modelName
+    );
 });
 
 builder.Services.AddSingleton<CampaignStorageService>();
