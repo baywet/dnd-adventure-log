@@ -45,13 +45,6 @@ export class ApiAxiomService {
     return response.data;
   }
 
-  static async getEpicMoment(campaignName: string, recordingName: string): Promise<any> {
-    const response = await axios.get(
-      `${API_BASE_URL}/campaigns/${encodeURIComponent(campaignName)}/recordings/${encodeURIComponent(recordingName)}/epic-moment`
-    );
-    return response.data;
-  }
-
   // --- Characters ---
   static async generateCharacters(campaignName: string): Promise<Characters> {
     const response = await axios.post(
@@ -67,17 +60,9 @@ export class ApiAxiomService {
     return response.data as Characters;
   }
 
-  static async generateCharacterProfile(campaignName: string, characterName: string): Promise<any> {
-    const response = await axios.post(
+  static async generateCharacterProfile(campaignName: string, characterName: string): Promise<void> {
+    await axios.post(
       `${API_BASE_URL}/campaigns/${encodeURIComponent(campaignName)}/characters/profile/${encodeURIComponent(characterName)}`
     );
-    return response.data;
-  }
-
-  static async getCharacterProfile(campaignName: string, characterName: string): Promise<any> {
-    const response = await axios.get(
-      `${API_BASE_URL}/campaigns/${encodeURIComponent(campaignName)}/characters/profile/${encodeURIComponent(characterName)}`
-    );
-    return response.data;
   }
 }
