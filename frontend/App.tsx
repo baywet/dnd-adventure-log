@@ -78,15 +78,15 @@ const App: React.FC = () => {
           players = await ApiAxiomService.listCharacters(selectedCampaign.name);
         }
 
-        for (const [i, player] of players.characters.entries()) {
-          setLoadingMessage(
-            `Painting portraits of the heroes (${i + 1}/${players.characters.length})...`
-          );
-          await ApiAxiomService.generateCharacterProfile(
-            selectedCampaign.name,
-            player.name
-          );
-        }
+        setLoadingMessage("Painting portraits of the heroes...");
+        await Promise.all(
+          players.characters.map((player) =>
+            ApiAxiomService.generateCharacterProfile(
+              selectedCampaign.name,
+              player.name
+            )
+          )
+        );
 
         setPlayers(players.characters);
 
