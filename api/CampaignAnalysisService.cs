@@ -187,7 +187,7 @@ public class CampaignAnalysisService : IAnalysisService
 				"""),
 			new UserChatMessage(transcription)
 		], cancellationToken: cancellationToken).ConfigureAwait(false);
-		var taleContent = result.Value.Content[0].Text;
+		var taleContent = result.Value.Content.Count > 0 ? result.Value.Content[0].Text : throw new InvalidOperationException("Failed to generate epic moment tale.");
 		await _storageService.SaveEpicMomentTaleAsync(campaignName, recordingName, taleContent, cancellationToken).ConfigureAwait(false);
 		var epicMomentVideo = await _customVideoClient.GetEpicMomentVideoAsync(taleContent, cancellationToken).ConfigureAwait(false)
 			?? throw new InvalidOperationException("Failed to generate epic moment video.");
