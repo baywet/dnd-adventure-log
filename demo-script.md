@@ -14,7 +14,7 @@
 1. Updated `appsettings.development.json` with the endpoint, and deployment names.
 1. Browser open to [ai.azure.com](https://ai.azure.com)
 1. VSCode open to this repository, with the model-instructions open.
-1. Terminal open, and signed in to azure `az login --tenant "vincentbirethotmail.onmicrosoft.com"`.
+1. Terminal open, and signed in to azure `az login --tenant "microsoft.onmicrosoft.com"`, subscription id `e72e5254-f265-4e95-9bd2-9ee8e7329051`.
 1. Front end built `cd frontend && npm ci && npm run build`.
 1. API running `dotnet watch run --project .\api\api.csproj`.
 1. Browser open to the API root.
