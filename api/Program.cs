@@ -25,6 +25,11 @@ builder.Services.AddSingleton<AuthenticationPolicy>(sp => new BearerTokenPolicy(
 // ---- End of auth
 var endpoint = new Uri(builder.Configuration[$"AzureOpenAI:EastUS2"] ?? throw new InvalidOperationException("Please set the AzureOpenAI:EastUS2 configuration value."));
 
+var clientOptions = new OpenAIClientOptions()
+{
+    Endpoint = endpoint,
+};
+
 string GetModelName(string modelKey) =>
     builder.Configuration[$"ModelDeploymentNames:{modelKey}"] ??
     throw new InvalidOperationException($"Please set the ModelDeploymentNames:{modelKey} configuration value.");
@@ -33,49 +38,34 @@ builder.Services.AddSingleton(sp =>
     new AudioClient(
         authenticationPolicy: sp.GetRequiredService<AuthenticationPolicy>(),
         model: GetModelName("Audio"),
-        options: new OpenAIClientOptions
-        {
-            Endpoint = endpoint
-        }
+        options: clientOptions
 ));
 
 builder.Services.AddSingleton(sp => 
     new ChatClient(
         authenticationPolicy: sp.GetRequiredService<AuthenticationPolicy>(),
         model: GetModelName("Chat"),
-        options: new OpenAIClientOptions
-        {
-            Endpoint = endpoint
-        }
+        options: clientOptions
 ));
 
 builder.Services.AddSingleton(sp => 
     new ResponsesClient(
         authenticationPolicy: sp.GetRequiredService<AuthenticationPolicy>(),
         model: GetModelName("Responses"),
-        options: new OpenAIClientOptions
-        {
-            Endpoint = endpoint
-        }
+        options: clientOptions
 ));
 
 builder.Services.AddSingleton(sp => 
     new ImageClient(
         authenticationPolicy: sp.GetRequiredService<AuthenticationPolicy>(),
         model: GetModelName("Image"),
-        options: new OpenAIClientOptions
-        {
-            Endpoint = endpoint
-        }
+        options: clientOptions
 ));
 
 builder.Services.AddSingleton(sp => 
     new VideoClient(
         authenticationPolicy: sp.GetRequiredService<AuthenticationPolicy>(),
-        options: new OpenAIClientOptions
-        {
-            Endpoint = endpoint
-        }
+        options: clientOptions
 ));
 
 builder.Services.AddHttpClient();
