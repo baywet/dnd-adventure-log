@@ -1,3 +1,5 @@
+using System.ClientModel;
+
 namespace api;
 
 public static class CharactersOperations
@@ -43,6 +45,10 @@ public static class CharactersOperations
 				return Results.NotFound(ex.Message);
 			}
 			catch (InvalidOperationException ex)
+			{
+				return Results.InternalServerError(ex.Message);
+			}
+			catch (ClientResultException ex)
 			{
 				return Results.InternalServerError(ex.Message);
 			}
