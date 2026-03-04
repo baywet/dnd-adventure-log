@@ -171,7 +171,7 @@ public class CampaignStorageService
 		}
 
 		var sanitizedCharacterName = string.Concat(characterName
-			.Except(InvalidFileNameChars));
+			.Where(static x => !InvalidFileNameChars.Contains(x)));
 		return Path.Combine(GetCharactersRootPath(campaignName), $"{sanitizedCharacterName}.png");
 	}
 	static string GetCampaignRootPath(string campaignName)
@@ -181,7 +181,7 @@ public class CampaignStorageService
 			throw new InvalidDataException("Name contains invalid characters.");
 		}
 		var sanitizedCampaignName = string.Concat(campaignName
-			.Except(InvalidFileNameChars));
+			.Where(static x => !InvalidFileNameChars.Contains(x)));
 		return Path.Combine(Constants.CampaignsDirectoryName, sanitizedCampaignName);
 	}
 	static string GetRecordingsRootPath(string campaignName)
