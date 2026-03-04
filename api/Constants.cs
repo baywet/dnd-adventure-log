@@ -2,7 +2,6 @@ namespace api;
 
 public static class Constants
 {
-	public const string EastUS2Region = "EastUS2";
 	public const string ApiDocsPath = "api-docs";
 	public const string RecordingsDirectoryName = "Recordings";
 	public const string TranscriptionDirectoryName = "Transcriptions";
