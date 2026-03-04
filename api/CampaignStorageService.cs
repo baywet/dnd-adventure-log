@@ -180,7 +180,9 @@ public class CampaignStorageService
 		{
 			throw new InvalidDataException("Name contains invalid characters.");
 		}
-		return Path.Combine(Constants.CampaignsDirectoryName, campaignName);
+		var sanitizedCampaignName = string.Concat(campaignName
+			.Except(InvalidFileNameChars));
+		return Path.Combine(Constants.CampaignsDirectoryName, sanitizedCampaignName);
 	}
 	static string GetRecordingsRootPath(string campaignName)
 	{
