@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.Net.Http.Headers;
 using System.Text.Json.Nodes;
 using Azure.Core;
 
@@ -57,15 +58,13 @@ public class CustomVideoClient
 		using var httpClient = _httpClientFactory.CreateClient();
 		httpClient.BaseAddress = new Uri(_endpoint);
 		await SetBaseAuthenticationHeaderAsync(httpClient).ConfigureAwait(false);
-		using var response = await httpClient.PostAsJsonAsync("/openai/v1/video/generations/jobs?api-version=preview",
+		using var response = await httpClient.PostAsJsonAsync("/openai/v1/videos?api-version=preview",
 			new
 			{
 				model = _modelName,
 				prompt = recounting,
-				width = 1920,
-				height = 1080,
-				n_seconds = 15,
-				format = "mp4"
+				size = "1280x720",
+				seconds = "8",
 			}, cancellationToken).ConfigureAwait(false);
 		if (!response.IsSuccessStatusCode)
 		{
@@ -76,9 +75,9 @@ public class CustomVideoClient
 		var taskId = responseJson?["id"]?.ToString();
 		return await PollForVideoGenerationStatus(httpClient, taskId ?? throw new InvalidOperationException("Task ID is missing."), cancellationToken).ConfigureAwait(false);
 	}
-	private async static Task<Stream?> PollForVideoGenerationStatus(HttpClient client, string taskId, CancellationToken cancellationToken)
+	private async static Task<Stream?> PollForVideoGenerationStatus(HttpClient client, string videoId, CancellationToken cancellationToken)
 	{
-		var response = await client.GetAsync($"/openai/v1/video/generations/jobs/{taskId}?api-version=preview", cancellationToken).ConfigureAwait(false);
+		var response = await client.GetAsync($"/openai/v1/videos/{videoId}?api-version=preview", cancellationToken).ConfigureAwait(false);
 		if (!response.IsSuccessStatusCode)
 		{
 			var errorContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -86,14 +85,11 @@ public class CustomVideoClient
 		}
 		var responseJson = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: cancellationToken).ConfigureAwait(false);
 		var status = responseJson?["status"]?.ToString();
-		if (string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase))
+		if (string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase))
 		{
-			var videoId = responseJson?["generations"]?[0]?["id"]?.ToString();
-			if (string.IsNullOrEmpty(videoId))
-			{
-				throw new InvalidOperationException("Video ID is missing.");
-			}
-			using var videoResponse = await client.GetAsync($"/openai/v1/video/generations/{videoId}/content/video?api-version=preview", cancellationToken).ConfigureAwait(false);
+			using var request = new HttpRequestMessage(HttpMethod.Get, $"/openai/v1/videos/{videoId}/content?api-version=preview");
+			request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("video/mp4"));
+			using var videoResponse = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
 			videoResponse.EnsureSuccessStatusCode();
 			var ms = new MemoryStream();
 			await videoResponse.Content.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
@@ -107,7 +103,7 @@ public class CustomVideoClient
 		else
 		{
 			await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
-			return await PollForVideoGenerationStatus(client, taskId, cancellationToken).ConfigureAwait(false);
+			return await PollForVideoGenerationStatus(client, videoId, cancellationToken).ConfigureAwait(false);
 		}
 	}
 }
