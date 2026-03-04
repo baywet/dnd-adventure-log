@@ -101,6 +101,16 @@ public class CampaignAnalysisService : IAnalysisService
 			cancellationToken: cancellationToken
 		).ConfigureAwait(false);
 		var jsonContent = response.Value.GetOutputText() ?? throw new InvalidOperationException("Failed to extract characters.");
+
+		try
+		{ // validate the JSON before saving it, to avoid storing invalid data
+			var _ = JsonSerializer.Deserialize<CharacterList>(jsonContent) ?? throw new InvalidOperationException("Failed to parse characters summary.");
+		}
+		catch (JsonException ex)
+		{
+			throw new InvalidOperationException("Failed to parse characters summary.", ex);
+		}
+
 		await _storageService.SaveCharacterSummaryAsync(campaignName, jsonContent, cancellationToken).ConfigureAwait(false);
 		return jsonContent;
 	}
