@@ -162,6 +162,7 @@ public class CampaignStorageService
 		GetRecordingAssetsRootPath(campaignName, Constants.CharactersDirectoryName);
 	static string GetCharacterConfigFilePath(string campaignName) =>
 		Path.Combine(GetCharactersRootPath(campaignName), "list.json");
+	static readonly HashSet<char> InvalidFileNameChars = [.. Path.GetInvalidFileNameChars(), .. Path.GetInvalidPathChars()];
 	static string GetCharacterProfilePicturePath(string campaignName, string characterName)
 	{
 		if (Path.IsPathRooted(characterName) || characterName.Contains("..", StringComparison.Ordinal))
@@ -169,7 +170,9 @@ public class CampaignStorageService
 			throw new InvalidDataException("Name contains invalid characters.");
 		}
 
-		return Path.Combine(GetCharactersRootPath(campaignName), $"{characterName}.png");
+		var sanitizedCharacterName = string.Concat(characterName
+			.Except(InvalidFileNameChars));
+		return Path.Combine(GetCharactersRootPath(campaignName), $"{sanitizedCharacterName}.png");
 	}
 	static string GetCampaignRootPath(string campaignName)
 	{
