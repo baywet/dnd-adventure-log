@@ -1,6 +1,7 @@
 using System.ClientModel;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using OpenAI.Videos;
 
 namespace api;
@@ -32,22 +33,20 @@ public class CustomVideoClient
 
 		using var bodyStream = await multipart.ReadAsStreamAsync(cancellationToken);
 
-		var result = await _videoClient.CreateVideoAsync(BinaryContent.Create(bodyStream), contentType).ConfigureAwait(false);
+		var createResult = await _videoClient.CreateVideoAsync(BinaryContent.Create(bodyStream), contentType).ConfigureAwait(false);
+        var createRaw = createResult.GetRawResponse().ContentStream ?? throw new InvalidOperationException("Create video response stream is missing.");
 
-		var createResult = await _videoClient.CreateVideoAsync(BinaryContent.Create(bodyStream), contentType);
-        var createRaw = createResult.GetRawResponse().Content;
-
-        using var createdDoc = JsonDocument.Parse(createRaw);
-        var taskId = createdDoc.RootElement.GetProperty("id").GetString();
+        var createdDoc = await JsonNode.ParseAsync(createRaw, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var taskId = createdDoc?["id"]?.GetValue<string>();
 		
 		return await PollForVideoGenerationStatus(taskId ?? throw new InvalidOperationException("Task ID is missing."), cancellationToken).ConfigureAwait(false);
 	}
 	private async Task<Stream?> PollForVideoGenerationStatus(string videoId, CancellationToken cancellationToken)
 	{
 		var result = await _videoClient.GetVideoAsync(videoId).ConfigureAwait(false);
-		var getRaw = result.GetRawResponse().Content;
-		using var getDoc = JsonDocument.Parse(getRaw);
-        var status = getDoc.RootElement.GetProperty("status").GetString();
+		var getRaw = result.GetRawResponse().ContentStream ?? throw new InvalidOperationException("Get video response stream is missing.");
+		var getDoc = await JsonNode.ParseAsync(getRaw, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var status = getDoc?["status"]?.GetValue<string>();
 
 		if (string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase))
 		{
