@@ -10,7 +10,7 @@ namespace api;
 
 public class CampaignAnalysisService : IAnalysisService
 {
-	public CampaignAnalysisService(CampaignStorageService storageService, CustomVideoClient customVideoClient, ChatClient chatClient, AudioClient audioClient, IHttpClientFactory httpClientFactory, ImageClient imageClient, ResponsesClient responsesClient)
+	public CampaignAnalysisService(CampaignStorageService storageService, CustomVideoClient customVideoClient, ChatClient chatClient, AudioClient audioClient, IHttpClientFactory httpClientFactory, ImageClient imageClient, ResponsesClient responsesClient, CampaignModelSelection modelSelection)
 	{
 		ArgumentNullException.ThrowIfNull(storageService);
 		ArgumentNullException.ThrowIfNull(customVideoClient);
@@ -19,6 +19,7 @@ public class CampaignAnalysisService : IAnalysisService
 		ArgumentNullException.ThrowIfNull(httpClientFactory);
 		ArgumentNullException.ThrowIfNull(imageClient);
 		ArgumentNullException.ThrowIfNull(responsesClient);
+		ArgumentNullException.ThrowIfNull(modelSelection);
 		_storageService = storageService;
 		_customVideoClient = customVideoClient;
 		_chatClient = chatClient;
@@ -26,6 +27,7 @@ public class CampaignAnalysisService : IAnalysisService
 		_imageClient = imageClient;
 		_httpClientFactory = httpClientFactory;
 		_responsesClient = responsesClient;
+		_modelSelection = modelSelection;
 	}
 
 	private readonly CampaignStorageService _storageService;
@@ -35,6 +37,7 @@ public class CampaignAnalysisService : IAnalysisService
 	private readonly ImageClient _imageClient;
 	private readonly IHttpClientFactory _httpClientFactory;
 	private readonly ResponsesClient _responsesClient;
+	private readonly CampaignModelSelection _modelSelection;
 
 	public async Task<string> ExtractCharactersAsync(string campaignName, CancellationToken cancellationToken)
 	{
@@ -44,10 +47,8 @@ public class CampaignAnalysisService : IAnalysisService
 			throw new FileNotFoundException("No transcript found for this campaign.");
 		}
 		var response = await _responsesClient.CreateResponseAsync(
-			new CreateResponseOptions
-			{
-				InputItems =
-				{
+			new CreateResponseOptions(_modelSelection.ResponsesModel, 
+			[
 					ResponseItem.CreateSystemMessageItem(
 						"""
 						You are a note taker assisting a group of dungeons and dragons players tasked with recording and putting together recaps of each play session so the dungeon master and players can get insights from previous sessions.
@@ -60,7 +61,8 @@ public class CampaignAnalysisService : IAnalysisService
 						"""
 					),
 					ResponseItem.CreateUserMessageItem(transcript),
-				},
+			])
+			{
 				TextOptions = new ResponseTextOptions
 				{
 					TextFormat = ResponseTextFormat.CreateJsonSchemaFormat("characters", BinaryData.FromString

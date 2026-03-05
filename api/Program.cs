@@ -50,9 +50,8 @@ builder.Services.AddSingleton(sp =>
 
 builder.Services.AddSingleton(sp => 
     new ResponsesClient(
-        authenticationPolicy: sp.GetRequiredService<AuthenticationPolicy>(),
-        model: GetModelName("Responses"),
-        options: clientOptions
+        sp.GetRequiredService<AuthenticationPolicy>(),
+        clientOptions
 ));
 
 builder.Services.AddSingleton(sp => 
@@ -78,6 +77,18 @@ builder.Services.AddSingleton(sp =>
         videoClient,
         modelName
     );
+});
+
+builder.Services.AddSingleton(sp =>
+{
+    var modelSelection = new CampaignModelSelection(
+        ChatModel: GetModelName("Chat"),
+        AudioModel: GetModelName("Audio"),
+        ImageModel: GetModelName("Image"),
+        ResponsesModel: GetModelName("Responses"),
+        VideoModel: GetModelName("Video")
+    );
+    return modelSelection;
 });
 
 builder.Services.AddSingleton<CampaignStorageService>();
