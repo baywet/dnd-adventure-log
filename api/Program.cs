@@ -30,6 +30,17 @@ var clientOptions = new OpenAIClientOptions()
     Endpoint = endpoint,
 };
 
+#region audioClientMagic
+
+var audioClientOptions = new OpenAIClientOptions()
+{
+    Endpoint = new Uri(endpoint.ToString().Replace("openai.azure.com/openai/v1/", $"cognitiveservices.azure.com/openai/deployments/{GetModelName("Audio")}/"))
+};
+
+audioClientOptions.AddPolicy(new ApiVersionPipelinePolicy(), PipelinePosition.BeforeTransport);
+
+#endregion
+
 string GetModelName(string modelKey) =>
     builder.Configuration[$"ModelDeploymentNames:{modelKey}"] ??
     throw new InvalidOperationException($"Please set the ModelDeploymentNames:{modelKey} configuration value.");
@@ -38,7 +49,7 @@ builder.Services.AddSingleton(sp =>
     new AudioClient(
         authenticationPolicy: sp.GetRequiredService<AuthenticationPolicy>(),
         model: GetModelName("Audio"),
-        options: clientOptions
+        options: audioClientOptions
 ));
 
 builder.Services.AddSingleton(sp => 
