@@ -1,98 +1,59 @@
 using System.ClientModel;
-using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
-using Azure.Core;
+using OpenAI.Videos;
 
 namespace api;
 
 public class CustomVideoClient
 {
-	private readonly string _endpoint;
-	private readonly IHttpClientFactory _httpClientFactory;
 	private readonly string _modelName;
-	private readonly TokenCredential? _tokenCredentials;
-	private readonly ApiKeyCredential? _apiKeyCredential;
+	private readonly VideoClient _videoClient;
 	
-	public CustomVideoClient(string endpoint, IHttpClientFactory httpClientFactory, string modelName, ApiKeyCredential apiKeyCredential):this(endpoint, httpClientFactory, modelName)
+	public CustomVideoClient(VideoClient videoClient, string modelName)
 	{
-		ArgumentNullException.ThrowIfNull(apiKeyCredential);
-		_apiKeyCredential = apiKeyCredential;
-	}
-
-	public CustomVideoClient(string endpoint, IHttpClientFactory httpClientFactory, string modelName, TokenCredential tokenCredentials) : this(endpoint, httpClientFactory, modelName)
-	{
-		ArgumentNullException.ThrowIfNull(tokenCredentials);
-		_tokenCredentials = tokenCredentials;
-	}
-
-	public CustomVideoClient(string endpoint, IHttpClientFactory httpClientFactory, string modelName)
-	{
-		ArgumentException.ThrowIfNullOrEmpty(endpoint);
-		ArgumentNullException.ThrowIfNull(httpClientFactory);
+		ArgumentNullException.ThrowIfNull(videoClient);
 		ArgumentException.ThrowIfNullOrEmpty(modelName);
-		_endpoint = endpoint;
-		_httpClientFactory = httpClientFactory;
 		_modelName = modelName;
+		_videoClient = videoClient;
 	}
-	private async Task SetBaseAuthenticationHeaderAsync(HttpClient client)
-	{
-		var apiKey = string.Empty;
-		_apiKeyCredential?.Deconstruct(out apiKey);
-		if (!string.IsNullOrEmpty(apiKey))
-		{
-			client.DefaultRequestHeaders.Add("api-key", apiKey);
-			return;
-		}
-		if (_tokenCredentials != null)
-		{
-			var token = await _tokenCredentials.GetTokenAsync(
-				new TokenRequestContext(new[] { "https://cognitiveservices.azure.com/.default" }),
-				CancellationToken.None).ConfigureAwait(false);
-			client.DefaultRequestHeaders.Authorization = new("Bearer", token.Token);
-			return;
-		}
-		throw new InvalidOperationException("No valid authentication method configured.");
-	}
+	const string textPlainMimeType = "text/plain";
 	public async Task<Stream?> GetEpicMomentVideoAsync(string recounting, CancellationToken cancellationToken)
 	{
-		using var httpClient = _httpClientFactory.CreateClient();
-		httpClient.BaseAddress = new Uri(_endpoint);
-		await SetBaseAuthenticationHeaderAsync(httpClient).ConfigureAwait(false);
-		using var response = await httpClient.PostAsJsonAsync("/openai/v1/videos?api-version=preview",
-			new
-			{
-				model = _modelName,
-				prompt = recounting,
-				size = "1280x720",
-				seconds = "8",
-			}, cancellationToken).ConfigureAwait(false);
-		if (!response.IsSuccessStatusCode)
-		{
-			var errorContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-			throw new InvalidOperationException($"Video generation request failed with status code {response.StatusCode}: {errorContent}");
-		}
-		var responseJson = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: cancellationToken).ConfigureAwait(false);
-		var taskId = responseJson?["id"]?.ToString();
-		return await PollForVideoGenerationStatus(httpClient, taskId ?? throw new InvalidOperationException("Task ID is missing."), cancellationToken).ConfigureAwait(false);
+		var boundary = Guid.NewGuid().ToString();
+		var contentType = $"multipart/form-data; boundary=\"{boundary}\"";
+
+		using var multipart = new MultipartFormDataContent(boundary);
+
+        multipart.Add(new StringContent(_modelName, Encoding.UTF8, textPlainMimeType), "model");
+        multipart.Add(new StringContent(recounting, Encoding.UTF8, textPlainMimeType), "prompt");
+        multipart.Add(new StringContent("1280x720", Encoding.UTF8, textPlainMimeType), "size");
+        multipart.Add(new StringContent("8", Encoding.UTF8, textPlainMimeType), "seconds");
+
+		using var bodyStream = await multipart.ReadAsStreamAsync(cancellationToken);
+
+		var createResult = await _videoClient.CreateVideoAsync(BinaryContent.Create(bodyStream), contentType).ConfigureAwait(false);
+        var createRaw = createResult.GetRawResponse().ContentStream ?? throw new InvalidOperationException("Create video response stream is missing.");
+
+        var createdDoc = await JsonNode.ParseAsync(createRaw, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var taskId = createdDoc?["id"]?.GetValue<string>();
+		
+		return await PollForVideoGenerationStatus(taskId ?? throw new InvalidOperationException("Task ID is missing."), cancellationToken).ConfigureAwait(false);
 	}
-	private async static Task<Stream?> PollForVideoGenerationStatus(HttpClient client, string videoId, CancellationToken cancellationToken)
+	private async Task<Stream?> PollForVideoGenerationStatus(string videoId, CancellationToken cancellationToken)
 	{
-		var response = await client.GetAsync($"/openai/v1/videos/{videoId}?api-version=preview", cancellationToken).ConfigureAwait(false);
-		if (!response.IsSuccessStatusCode)
-		{
-			var errorContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-			throw new InvalidOperationException($"Video generation status request failed with status code {response.StatusCode}: {errorContent}");
-		}
-		var responseJson = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: cancellationToken).ConfigureAwait(false);
-		var status = responseJson?["status"]?.ToString();
+		var result = await _videoClient.GetVideoAsync(videoId).ConfigureAwait(false);
+		var getRaw = result.GetRawResponse().ContentStream ?? throw new InvalidOperationException("Get video response stream is missing.");
+		var getDoc = await JsonNode.ParseAsync(getRaw, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var status = getDoc?["status"]?.GetValue<string>();
+
 		if (string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase))
 		{
-			using var request = new HttpRequestMessage(HttpMethod.Get, $"/openai/v1/videos/{videoId}/content?api-version=preview");
-			request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("video/mp4"));
-			using var videoResponse = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
-			videoResponse.EnsureSuccessStatusCode();
+			var videoDownload = await _videoClient.DownloadVideoAsync(videoId).ConfigureAwait(false);
+			using var dlStream = videoDownload.GetRawResponse().ContentStream ?? throw new InvalidOperationException("Video stream is missing.");
 			var ms = new MemoryStream();
-			await videoResponse.Content.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+			await dlStream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
 			ms.Position = 0;
 			return ms;
 		}
@@ -103,7 +64,7 @@ public class CustomVideoClient
 		else
 		{
 			await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
-			return await PollForVideoGenerationStatus(client, videoId, cancellationToken).ConfigureAwait(false);
+			return await PollForVideoGenerationStatus(videoId, cancellationToken).ConfigureAwait(false);
 		}
 	}
 }

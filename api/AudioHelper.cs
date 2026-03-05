@@ -68,7 +68,7 @@ public static class AudioHelper
 			var convertedChunkStream = await ConvertMp3ToLowerBitrate(chunkStream, cancellationToken).ConfigureAwait(false);
 			if (convertedChunkStream != chunkStream)
 			{
-				await chunkStream.DisposeAsync();
+				await chunkStream.DisposeAsync().ConfigureAwait(false);
 			}
 
 			chunks.Add(new(chunkFileName, convertedChunkStream));

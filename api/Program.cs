@@ -1,8 +1,13 @@
-using Azure.AI.OpenAI;
 using Azure.Identity;
 using api;
-using System.ClientModel;
 using Azure.Core;
+using OpenAI.Videos;
+using OpenAI.Chat;
+using OpenAI;
+using System.ClientModel.Primitives;
+using OpenAI.Audio;
+using OpenAI.Responses;
+using OpenAI.Images;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,72 +15,91 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
+// ---- Entra ID to authenticate to Microsoft Foundry ----
 builder.Services.AddSingleton<TokenCredential, DefaultAzureCredential>();
+builder.Services.AddSingleton<AuthenticationPolicy>(sp => new BearerTokenPolicy(sp.GetRequiredService<TokenCredential>(), "https://cognitiveservices.azure.com/.default"));
+// ---- API Keys to authenticate to Microsoft Foundry ----
 //builder.Services.AddSingleton(new ApiKeyCredential(builder.Configuration["AzureOpenAIKey"] 
  //            ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
-builder.Services.AddSingleton<AzureNamedServicesHolder>(sp =>
+// builder.Services.AddSingleton<AuthenticationPolicy>( sp => ApiKeyAuthenticationPolicy.CreateBearerAuthorizationPolicy(sp.GetRequiredService<ApiKeyCredential>()));
+// ---- End of auth
+var endpoint = new Uri(builder.Configuration[$"AzureOpenAI:EastUS2"] ?? throw new InvalidOperationException("Please set the AzureOpenAI:EastUS2 configuration value."));
+
+var clientOptions = new OpenAIClientOptions()
 {
-    AzureOpenAIClient createClientWithUri(Uri uri) =>
-        sp.GetService<ApiKeyCredential>() is { } apiKeyCredential ?
-            new(uri, apiKeyCredential) :
-            new(uri, sp.GetRequiredService<TokenCredential>());
+    Endpoint = endpoint,
+};
 
-    AzureOpenAIClient createClient(string region) =>
-        createClientWithUri(new Uri(builder.Configuration[$"AzureOpenAI:{region}"] ??
-            throw new InvalidOperationException($"Please set the AzureOpenAI:{region} configuration value.")));
+#region audioClientMagic
 
-    return new(new(StringComparer.OrdinalIgnoreCase)
-    {
-        { Constants.EastUS2Region, createClient(Constants.EastUS2Region) },
-    });
-});
+var audioClientOptions = new OpenAIClientOptions()
+{
+    Endpoint = new Uri(endpoint.ToString().Replace("openai.azure.com/openai/v1/", $"cognitiveservices.azure.com/openai/deployments/{GetModelName("Audio")}/"))
+};
+
+audioClientOptions.AddPolicy(new ApiVersionPipelinePolicy(), PipelinePosition.BeforeTransport);
+
+#endregion
 
 string GetModelName(string modelKey) =>
     builder.Configuration[$"ModelDeploymentNames:{modelKey}"] ??
     throw new InvalidOperationException($"Please set the ModelDeploymentNames:{modelKey} configuration value.");
 
-builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(Constants.EastUS2Region)
-                                        .GetAudioClient(GetModelName("Audio")));
+builder.Services.AddSingleton(sp => 
+    new AudioClient(
+        authenticationPolicy: sp.GetRequiredService<AuthenticationPolicy>(),
+        model: GetModelName("Audio"),
+        options: audioClientOptions
+));
 
-builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(Constants.EastUS2Region)
-                                        .GetChatClient(GetModelName("Chat")));
+builder.Services.AddSingleton(sp => 
+    new ChatClient(
+        authenticationPolicy: sp.GetRequiredService<AuthenticationPolicy>(),
+        model: GetModelName("Chat"),
+        options: clientOptions
+));
 
-builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(Constants.EastUS2Region)
-                                        .GetResponsesClient(GetModelName("Responses")));
+builder.Services.AddSingleton(sp => 
+    new ResponsesClient(
+        sp.GetRequiredService<AuthenticationPolicy>(),
+        clientOptions
+));
 
-builder.Services.AddSingleton(sp => sp.GetRequiredService<AzureNamedServicesHolder>()
-                                        .GetService(Constants.EastUS2Region)
-                                        .GetImageClient(GetModelName("Image")));
+builder.Services.AddSingleton(sp => 
+    new ImageClient(
+        authenticationPolicy: sp.GetRequiredService<AuthenticationPolicy>(),
+        model: GetModelName("Image"),
+        options: clientOptions
+));
+
+builder.Services.AddSingleton(sp => 
+    new VideoClient(
+        authenticationPolicy: sp.GetRequiredService<AuthenticationPolicy>(),
+        options: clientOptions
+));
+
 builder.Services.AddHttpClient();
 
 builder.Services.AddSingleton(sp =>
 {
     var modelName = GetModelName("Video");
-    var endpoint = builder.Configuration[$"AzureOpenAI:{Constants.EastUS2Region}"] ??
-    throw new InvalidOperationException($"Please set the AzureOpenAI:{Constants.EastUS2Region} configuration value.");
-    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-    if (sp.GetService<ApiKeyCredential>() is { } apiKeyCredential)
-    {
-        return new CustomVideoClient(
-            endpoint,
-            httpClientFactory,
-            modelName,
-            apiKeyCredential
-        );
-    }
-    if (sp.GetService<TokenCredential>() is { } tokenCredential)
-    {
-        return new CustomVideoClient(
-            endpoint,
-            httpClientFactory,
-            modelName,
-            tokenCredential
-        );
-    }
-    throw new InvalidOperationException("No valid authentication method configured.");
+    var videoClient = sp.GetRequiredService<VideoClient>();
+    return new CustomVideoClient(
+        videoClient,
+        modelName
+    );
+});
+
+builder.Services.AddSingleton(sp =>
+{
+    var modelSelection = new CampaignModelSelection(
+        ChatModel: GetModelName("Chat"),
+        AudioModel: GetModelName("Audio"),
+        ImageModel: GetModelName("Image"),
+        ResponsesModel: GetModelName("Responses"),
+        VideoModel: GetModelName("Video")
+    );
+    return modelSelection;
 });
 
 builder.Services.AddSingleton<CampaignStorageService>();
