@@ -1,17 +1,16 @@
 using System.ClientModel;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenAI.Videos;
 
 namespace api;
 
-public class CustomVideoClient
+public class VideoClientOrchestrator
 {
 	private readonly string _modelName;
 	private readonly VideoClient _videoClient;
 	
-	public CustomVideoClient(VideoClient videoClient, string modelName)
+	public VideoClientOrchestrator(VideoClient videoClient, string modelName)
 	{
 		ArgumentNullException.ThrowIfNull(videoClient);
 		ArgumentException.ThrowIfNullOrEmpty(modelName);

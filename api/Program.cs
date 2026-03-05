@@ -12,16 +12,17 @@ using OpenAI.Images;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 // ---- Entra ID to authenticate to Microsoft Foundry ----
 builder.Services.AddSingleton<TokenCredential, DefaultAzureCredential>();
-builder.Services.AddSingleton<AuthenticationPolicy>(sp => new BearerTokenPolicy(sp.GetRequiredService<TokenCredential>(), "https://cognitiveservices.azure.com/.default"));
+builder.Services.AddSingleton<AuthenticationPolicy>(sp => 
+    new BearerTokenPolicy(sp.GetRequiredService<TokenCredential>(), "https://ai.azure.com/.default"));
 // ---- API Keys to authenticate to Microsoft Foundry ----
 //builder.Services.AddSingleton(new ApiKeyCredential(builder.Configuration["AzureOpenAIKey"] 
- //            ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
-// builder.Services.AddSingleton<AuthenticationPolicy>( sp => ApiKeyAuthenticationPolicy.CreateBearerAuthorizationPolicy(sp.GetRequiredService<ApiKeyCredential>()));
+//            ?? throw new InvalidOperationException("Please set the AzureOpenAI:ApiKey secret.")));
+// builder.Services.AddSingleton<AuthenticationPolicy>( sp => 
+//     ApiKeyAuthenticationPolicy.CreateBearerAuthorizationPolicy(sp.GetRequiredService<ApiKeyCredential>()));
 // ---- End of auth
 var endpoint = new Uri(builder.Configuration[$"AzureOpenAI:EastUS2"] ?? throw new InvalidOperationException("Please set the AzureOpenAI:EastUS2 configuration value."));
 
@@ -84,7 +85,7 @@ builder.Services.AddSingleton(sp =>
 {
     var modelName = GetModelName("Video");
     var videoClient = sp.GetRequiredService<VideoClient>();
-    return new CustomVideoClient(
+    return new VideoClientOrchestrator(
         videoClient,
         modelName
     );

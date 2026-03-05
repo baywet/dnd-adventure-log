@@ -9,7 +9,7 @@ namespace api;
 
 public class CampaignAnalysisService : IAnalysisService
 {
-	public CampaignAnalysisService(CampaignStorageService storageService, CustomVideoClient customVideoClient, ChatClient chatClient, AudioClient audioClient, IHttpClientFactory httpClientFactory, ImageClient imageClient, ResponsesClient responsesClient, CampaignModelSelection modelSelection)
+	public CampaignAnalysisService(CampaignStorageService storageService, VideoClientOrchestrator customVideoClient, ChatClient chatClient, AudioClient audioClient, IHttpClientFactory httpClientFactory, ImageClient imageClient, ResponsesClient responsesClient, CampaignModelSelection modelSelection)
 	{
 		ArgumentNullException.ThrowIfNull(storageService);
 		ArgumentNullException.ThrowIfNull(customVideoClient);
@@ -30,7 +30,7 @@ public class CampaignAnalysisService : IAnalysisService
 	}
 
 	private readonly CampaignStorageService _storageService;
-	private readonly CustomVideoClient _customVideoClient;
+	private readonly VideoClientOrchestrator _customVideoClient;
 	private readonly ChatClient _chatClient;
 	private readonly AudioClient _audioClient;
 	private readonly ImageClient _imageClient;
