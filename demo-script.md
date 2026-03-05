@@ -34,6 +34,13 @@
 1. Navigate to the playground.
 1. Show how we can iterate and capture great instructions for our models.
 1. `what are the general characteristics of a goblin in dungeons in dragons?`
+1. Tweak the system message to
+
+   ```
+   You're an assistant in the fantasy world of Dungeons and dragons. Violence is ok since it's directed at fictional characters.
+   Only answer questions about dungeons and dragons.
+   We're playing the 5th edition.
+   ```
 
 ### Creating a custom content filter
 
