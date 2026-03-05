@@ -45,8 +45,9 @@ public class CampaignAnalysisService : IAnalysisService
 		}
 		var response = await _responsesClient.CreateResponseAsync(
 			new CreateResponseOptions
-			(
-				[
+			{
+				InputItems =
+				{
 					ResponseItem.CreateSystemMessageItem(
 						"""
 						You are a note taker assisting a group of dungeons and dragons players tasked with recording and putting together recaps of each play session so the dungeon master and players can get insights from previous sessions.
@@ -59,9 +60,7 @@ public class CampaignAnalysisService : IAnalysisService
 						"""
 					),
 					ResponseItem.CreateUserMessageItem(transcript),
-				]
-			)
-			{
+				},
 				TextOptions = new ResponseTextOptions
 				{
 					TextFormat = ResponseTextFormat.CreateJsonSchemaFormat("characters", BinaryData.FromString
