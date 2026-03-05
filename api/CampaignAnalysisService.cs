@@ -1,5 +1,4 @@
 using System.ClientModel;
-using System.Text;
 using System.Text.Json;
 using OpenAI.Audio;
 using OpenAI.Chat;
@@ -215,19 +214,7 @@ public class CampaignAnalysisService : IAnalysisService
 			var fileName = await _storageService.SaveRecordingAsync(campaignName, file.FileName, ms, cancellationToken).ConfigureAwait(false);
 			ms.Position = 0;
 
-			var response = _audioClient.TranscribeAudioStreamingAsync(ms, fileName, options, cancellationToken);
-			var transcriptionBuilder = new StringBuilder();
-			await foreach (var chunk in response)
-			{
-				if (chunk is StreamingAudioTranscriptionTextDoneUpdate doneUpdate)
-					transcriptionBuilder.Append(doneUpdate.Text);
-				else if (chunk is StreamingAudioTranscriptionTextDeltaUpdate chunkUpdate)
-					transcriptionBuilder.Append(chunkUpdate.Delta);
-				else
-					throw new InvalidOperationException($"Unknown transcription response chunk. {chunk.GetType().FullName}");
-			}
-
-			var transcription = transcriptionBuilder.ToString();
+			var transcription = await AudioHelper.ChunkAndMergeTranscriptsIfRequired(ms, fileName, options, _audioClient, cancellationToken).ConfigureAwait(false);
 			await _storageService.SaveTranscriptionAsync(campaignName, fileName, transcription, cancellationToken).ConfigureAwait(false);
 			results.Add(Path.GetFileNameWithoutExtension(fileName));
 		}
