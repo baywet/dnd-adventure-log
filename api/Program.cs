@@ -33,9 +33,19 @@ var clientOptions = new OpenAIClientOptions()
 
 #region audioClientMagic
 
+UriBuilder audioEndpointBuilder = new(endpoint)
+{
+ Host = endpoint.Host.Replace(
+  ".openai.azure.com",
+  ".cognitiveservices.azure.com",
+  StringComparison.OrdinalIgnoreCase),
+ Path = $"openai/deployments/{GetModelName("Audio")}/",
+ Query = string.Empty
+};
+
 var audioClientOptions = new OpenAIClientOptions()
 {
-    Endpoint = new Uri(endpoint.ToString().Replace("openai.azure.com/openai/v1/", $"cognitiveservices.azure.com/openai/deployments/{GetModelName("Audio")}/"))
+    Endpoint = audioEndpointBuilder.Uri
 };
 
 audioClientOptions.AddPolicy(new ApiVersionPipelinePolicy(), PipelinePosition.BeforeTransport);
