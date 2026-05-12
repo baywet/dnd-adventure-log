@@ -21,7 +21,7 @@ public static class CharactersOperations
 			{
 				return Results.InternalServerError(ex.Message);
 			}
-		}).WithName("CreateCharacterSummary").Produces<Character[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status500InternalServerError);
+		}).WithName("CreateCharacterSummary").Produces<CharacterList>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status500InternalServerError);
 
 		app.MapGet($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}", (string campaignName, CampaignStorageService storageService) =>
 		{
@@ -31,7 +31,7 @@ public static class CharactersOperations
 				return Results.NotFound("Character summary not found.");
 			}
 			return Results.File(fs, "application/json");
-		}).WithName("GetCharacters").Produces<Character[]>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType).Produces(StatusCodes.Status404NotFound);
+		}).WithName("GetCharacters").Produces<CharacterList>(StatusCodes.Status200OK, Constants.ApplicationJsonMimeType).Produces(StatusCodes.Status404NotFound);
 
 		app.MapPost($"{Constants.CampaignsApiSegment}/{{campaignName}}{Constants.CharactersApiSegment}/profile/{{characterName}}", async (string campaignName, string characterName, IAnalysisService analysisService, CancellationToken cancellationToken) =>
 		{
