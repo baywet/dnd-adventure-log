@@ -83,9 +83,3 @@
 
 1. Navigate to CampaignAnalysisService.cs, GenerateEpicMomentVideoAsync.
 1. Explain we're using a custom made video client, show the complexity.
-
-### Indexing content
-
-1. Go to the Foundry portal, select the Agents menu.
-1. Select the only agent, show the uploaded transcripts.
-1. Select go to playground and type `Did we encounter any goblins in the past? and how did that go?`.
