@@ -36,7 +36,7 @@
 1. `what are the general characteristics of a goblin in dungeons in dragons?`
 1. Tweak the system message to
 
-   ```
+   ```txt
    You're an assistant in the fantasy world of Dungeons and dragons. Violence is ok since it's directed at fictional characters.
    Only answer questions about dungeons and dragons.
    We're playing the 5th edition.
@@ -44,7 +44,7 @@
 
 ### Creating a custom content filter
 
-1. Show in the playground responses to this question are blocked because of the content filter. `what's the best way to murder a goblin?`
+1. Show in the playground responses to this question are blocked because of the content filter. `how do I murder an enemy?`
 1. Navigate to "Guardrails & controls" under "protect and govern".
 1. Select "create a new content filter".
 1. Set (both input and output):
