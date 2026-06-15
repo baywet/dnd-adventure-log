@@ -199,6 +199,34 @@ public class CampaignAnalysisService : IAnalysisService
 		return epicMomentVideo;
 	}
 
+	private const string TranscriptCleanupSystemPrompt =
+		"""
+		You clean up transcripts for Dungeons & Dragons session recordings.
+		Remove podcast or show introductions, sponsor reads, calls to action, event announcements, product promotions, housekeeping, and closing credits or outros.
+		Preserve the actual game-session content and wording as much as possible.
+		Return only the cleaned transcript text with no commentary, summary, or markdown.
+		""";
+
+	private const string TranscriptCleanupUserPrompt =
+		"""
+		Clean up the following transcript by removing any non-session podcast or promotional content while preserving the actual Dungeons & Dragons session transcript.
+		""";
+
+	private async Task<string> CleanupTranscriptAsync(string transcript, CancellationToken cancellationToken)
+	{
+		var response = await _responsesClient.CreateResponseAsync(
+			new CreateResponseOptions(_modelSelection.ResponsesModel,
+			[
+				ResponseItem.CreateSystemMessageItem(TranscriptCleanupSystemPrompt),
+				ResponseItem.CreateUserMessageItem(TranscriptCleanupUserPrompt),
+				ResponseItem.CreateUserMessageItem(transcript),
+			]),
+			cancellationToken: cancellationToken
+		).ConfigureAwait(false);
+
+		return response.Value.GetOutputText() ?? throw new InvalidOperationException("Failed to clean up transcript.");
+	}
+
 	public async Task<string[]> SaveRecordingsAndGenerateTranscriptionsAsync(string campaignName, IFormFileCollection form, CancellationToken cancellationToken)
 	{
 		var options = new AudioTranscriptionOptions
@@ -217,7 +245,8 @@ public class CampaignAnalysisService : IAnalysisService
 			ms.Position = 0;
 
 			var transcription = await AudioHelper.ChunkAndMergeTranscriptsIfRequired(ms, fileName, options, _audioClient, cancellationToken).ConfigureAwait(false);
-			await _storageService.SaveTranscriptionAsync(campaignName, fileName, transcription, cancellationToken).ConfigureAwait(false);
+			var cleanedTranscription = await CleanupTranscriptAsync(transcription, cancellationToken).ConfigureAwait(false);
+			await _storageService.SaveTranscriptionAsync(campaignName, fileName, cleanedTranscription, cancellationToken).ConfigureAwait(false);
 			results.Add(Path.GetFileNameWithoutExtension(fileName));
 		}
 		return results.ToArray();
