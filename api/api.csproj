@@ -17,6 +17,10 @@
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.2.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="Campaigns\**\*" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+    <None Update="Campaigns\**\*" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+  </ItemGroup>
   <!-- <Target Name="BuildFrontend" BeforeTargets="Build"> -->
     <!-- Build the frontend (adjust command as needed) -->
     <!-- <Exec Command="npm install" WorkingDirectory="../frontend" />
