@@ -8,6 +8,7 @@ export interface Player {
   description: string;
   level?: number | null;
   race?: string | null;
+  isPlayable?: boolean | null;
   portraitUrl?: string;
   fileUrl?: string;
 }

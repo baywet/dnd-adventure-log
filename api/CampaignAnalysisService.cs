@@ -78,13 +78,15 @@ public class CampaignAnalysisService : IAnalysisService
 											"name": { "type": "string" },
 											"description": { "type": "string" },
 											"level": { "type": "integer", "nullable": true },
-											"race": { "type": "string", "nullable": true }
+											"race": { "type": "string", "nullable": true },
+											"isPlayable": { "type": "boolean" }
 										},
 										"required": [
 											"name",
 											"description",
 											"level",
-											"race"
+											"race",
+											"isPlayable"
 										],
 										"additionalProperties": false
 									}

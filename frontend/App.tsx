@@ -9,6 +9,8 @@ import { CampaignList } from "./components/CampaignList";
 import { PlayerPortrait } from "./components/PlayerPortrait";
 import { EpicMomentVideo } from "./components/EpicMomentVideo";
 
+const isPlayableCharacter = (player: Player) => player.isPlayable !== false;
+
 const App: React.FC = () => {
   const [processState, setProcessState] = useState<ProcessState>(
     ProcessState.Idle
@@ -78,17 +80,21 @@ const App: React.FC = () => {
           players = await ApiAxiomService.listCharacters(selectedCampaign.name);
         }
 
-        setLoadingMessage("Painting portraits of the heroes...");
-        await Promise.all(
-          players.characters.map((player) =>
-            ApiAxiomService.generateCharacterProfile(
-              selectedCampaign.name,
-              player.name
-            )
-          )
-        );
+        const playableCharacters = players.characters.filter(isPlayableCharacter);
 
-        setPlayers(players.characters);
+        if (playableCharacters.length > 0) {
+          setLoadingMessage("Painting portraits of the heroes...");
+          await Promise.all(
+            playableCharacters.map((player) =>
+              ApiAxiomService.generateCharacterProfile(
+                selectedCampaign.name,
+                player.name
+              )
+            )
+          );
+        }
+
+        setPlayers(playableCharacters);
 
         var recordings = await ApiAxiomService.listRecordings(
           selectedCampaign.name
