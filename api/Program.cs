@@ -30,6 +30,10 @@ var clientOptions = new OpenAIClientOptions()
 {
     Endpoint = endpoint,
 };
+var responsesClientOptions = new ResponsesClientOptions()
+{
+    Endpoint = new Uri(endpoint, "/openai/v1/"),
+};
 
 #region audioClientMagic
 
@@ -72,8 +76,8 @@ builder.Services.AddSingleton(sp =>
 
 builder.Services.AddSingleton(sp => 
     new ResponsesClient(
-        sp.GetRequiredService<AuthenticationPolicy>(),
-        clientOptions
+        authenticationPolicy: sp.GetRequiredService<AuthenticationPolicy>(),
+        options: responsesClientOptions
 ));
 
 builder.Services.AddSingleton(sp => 
