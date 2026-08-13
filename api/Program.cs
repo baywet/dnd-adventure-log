@@ -32,7 +32,7 @@ var clientOptions = new OpenAIClientOptions()
 };
 var responsesClientOptions = new ResponsesClientOptions()
 {
-    Endpoint = new Uri(endpoint, "/openai/v1/"),
+    Endpoint = new Uri($"{endpoint.GetLeftPart(UriPartial.Authority)}/openai/v1/"),
 };
 
 #region audioClientMagic
