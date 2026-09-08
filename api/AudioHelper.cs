@@ -1,5 +1,4 @@
-using NAudio.Lame;
-using NAudio.Wave;
+using NAudio.SoundFile;
 using OpenAI.Audio;
 
 namespace api;
@@ -8,26 +7,46 @@ public static class AudioHelper
 {
 	const int maxChunkSize = 26_214_400; // 25 MB
 	/// <summary>
-	/// Converts an MP3 MemoryStream to a lower bitrate MP3 MemoryStream.
+	/// Converts an MP3 MemoryStream to a smaller MP3 MemoryStream.
 	/// </summary>
 	/// <param name="inputMp3Stream">Input MP3 stream</param>
-	/// <param name="targetBitrateKbps">Target bitrate in kbps (e.g., 64)</param>
-	/// <returns>MemoryStream containing lower bitrate MP3</returns>
-	static async Task<MemoryStream> ConvertMp3ToLowerBitrate(MemoryStream inputMp3Stream, CancellationToken cancellationToken)
+	/// <returns>MemoryStream containing compressed MP3</returns>
+	static MemoryStream ConvertMp3ToLowerBitrate(MemoryStream inputMp3Stream, CancellationToken cancellationToken)
 	{
 		if (inputMp3Stream.Length <= maxChunkSize)
 		{
 			return inputMp3Stream;
 		}
 		inputMp3Stream.Position = 0;
-		using var mp3Reader = new Mp3FileReader(inputMp3Stream);
-		using var pcmStream = WaveFormatConversionStream.CreatePcmStream(mp3Reader);
+		using var audioReader = new SoundFileReader(inputMp3Stream);
 		var outStream = new MemoryStream();
-		using var lame = new LameMP3FileWriter(outStream, pcmStream.WaveFormat, LAMEPreset.ABR_64);
-		await pcmStream.CopyToAsync(lame, cancellationToken).ConfigureAwait(false);
-		await lame.FlushAsync(cancellationToken).ConfigureAwait(false);
+		WriteMp3Stream(audioReader, outStream, null, cancellationToken);
 		outStream.Position = 0;
 		return outStream;
+	}
+
+	static void WriteMp3Stream(SoundFileReader audioReader, Stream outStream, long? samplesToWrite, CancellationToken cancellationToken)
+	{
+		using var writer = new SoundFileWriter(outStream, audioReader.WaveFormat, SoundFileMajorFormat.Mp3, new()
+		{
+			Subtype = SoundFileSubtype.Mp3,
+			VbrQuality = 0.25,
+		});
+		var channels = audioReader.WaveFormat.Channels;
+		var buffer = new float[(64 * 1024 / channels) * channels];
+		long samplesRemaining = samplesToWrite ?? long.MaxValue;
+		while (samplesRemaining > 0)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			var samplesRequested = (int)Math.Min(buffer.Length, samplesRemaining);
+			var samplesRead = audioReader.Read(buffer.AsSpan(0, samplesRequested));
+			if (samplesRead == 0)
+			{
+				break;
+			}
+			writer.WriteSamples(buffer.AsSpan(0, samplesRead));
+			samplesRemaining -= samplesRead;
+		}
 	}
 
 	const int chunkDurationSeconds = 20 * 60; // 20 minutes
@@ -35,55 +54,49 @@ public static class AudioHelper
 	{
 
 		originalStream.Position = 0;
-		using var mp3Reader = new Mp3FileReader(originalStream);
-		var totalDuration = mp3Reader.TotalTime.TotalSeconds;
+		using var audioReader = new SoundFileReader(originalStream);
+		var totalDuration = audioReader.TotalTime.TotalSeconds;
 
 		if (totalDuration <= chunkDurationSeconds)
 		{
 			originalStream.Position = 0;
-			using var uploadStream = await ConvertMp3ToLowerBitrate(originalStream, cancellationToken).ConfigureAwait(false);
+			using var uploadStream = ConvertMp3ToLowerBitrate(originalStream, cancellationToken);
 			var transcription = await client.TranscribeAudioAsync(uploadStream, fileName, options, cancellationToken).ConfigureAwait(false);
 			return transcription.Value.Text;
 		}
 
-		// Split into 25-minute chunks
+		// Split into 20-minute chunks
 		int chunkIndex = 0;
 		var chunks = new List<Tuple<string, MemoryStream>>();
-		while (mp3Reader.CurrentTime.TotalSeconds < totalDuration)
+		var samplesPerChunk = (long)audioReader.WaveFormat.SampleRate * audioReader.WaveFormat.Channels * chunkDurationSeconds;
+		var totalSamples = audioReader.Length / sizeof(float);
+		while (audioReader.Position < audioReader.Length)
 		{
-			var chunkStart = mp3Reader.CurrentTime;
-			var chunkEnd = TimeSpan.FromSeconds(Math.Min(chunkStart.TotalSeconds + chunkDurationSeconds, totalDuration));
 			var chunkFileName = $"{Path.GetFileNameWithoutExtension(fileName)}-chunk{chunkIndex}.mp3";
 
 			var chunkStream = new MemoryStream();
-			Mp3Frame frame;
-			while ((frame = mp3Reader.ReadNextFrame()) != null)
-			{
-				var frameTime = mp3Reader.CurrentTime;
-				if (frameTime > chunkEnd)
-					break;
-				await chunkStream.WriteAsync(frame.RawData.AsMemory(0, frame.RawData.Length), cancellationToken).ConfigureAwait(false);
-			}
+			var samplesRemaining = totalSamples - (audioReader.Position / sizeof(float));
+			WriteMp3Stream(audioReader, chunkStream, Math.Min(samplesPerChunk, samplesRemaining), cancellationToken);
 			chunkStream.Position = 0;
-			var convertedChunkStream = await ConvertMp3ToLowerBitrate(chunkStream, cancellationToken).ConfigureAwait(false);
-			if (convertedChunkStream != chunkStream)
-			{
-				await chunkStream.DisposeAsync().ConfigureAwait(false);
-			}
-
-			chunks.Add(new(chunkFileName, convertedChunkStream));
+			chunks.Add(new(chunkFileName, chunkStream));
 			chunkIndex++;
 		}
-		var transcriptions = (await Task.WhenAll(chunks.Select((c) => client.TranscribeAudioAsync(c.Item2, c.Item1, options, cancellationToken))).ConfigureAwait(false))
-							.Select(static t => t.Value.Text)
-							.ToArray();
 
-		foreach (var chunk in chunks.Select(static c => c.Item2))
+		try
 		{
-			await chunk.DisposeAsync();
-		}
+			var transcriptions = (await Task.WhenAll(chunks.Select((c) => client.TranscribeAudioAsync(c.Item2, c.Item1, options, cancellationToken))).ConfigureAwait(false))
+								.Select(static t => t.Value.Text)
+								.ToArray();
 
-		return string.Join("\n", transcriptions);
+			return string.Join("\n", transcriptions);
+		}
+		finally
+		{
+			foreach (var chunk in chunks.Select(static c => c.Item2))
+			{
+				await chunk.DisposeAsync();
+			}
+		}
 	}
 
 }
